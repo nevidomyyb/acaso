@@ -63,7 +63,7 @@
 | Classificação de tema/recusa | **Amazon Bedrock — Claude Haiku 4.5 via Batch Inference** (decidido), **pré-calculada** e versionada em `data/enriched/` | Fica na AWS; dashboard não depende de LLM em tempo real; `compose up` roda sem credenciais; custo estimado ~US$ 25–45 (§12.1) |
 | Backend | **Flask + flask-smorest** (schemas marshmallow), servido por gunicorn | Familiaridade com Flask; smorest valida entrada/saída pelos schemas e gera OpenAPI/Swagger automaticamente; Blueprints organizam os endpoints (ADR-002) |
 | Cache da API | Flask-Caching (Redis local; ElastiCache em produção) | Invalidação por versão da carga (§6.4) |
-| Frontend | **Decidir no Dia 1 (ADR-003):** Next.js + Recharts (mais "produto", alinhado à referência deles) **ou** Streamlit consumindo a API (mais rápido) | Trade-off tempo × percepção de produto |
+| Frontend | **Streamlit com tema próprio, consumindo a API** (ADR-003 aceito em 11/11) | Trade-off tempo × percepção de produto |
 | Testes | pytest (ETL, SQL dos indicadores) + test client do Flask (API) | Indicador não muda sem ninguém perceber |
 | Deploy (descrito) | S3 → ETL em ECS Fargate/Step Functions (agendado via EventBridge) → classificação via Bedrock Batch → RDS → API Flask (gunicorn) em ECS Fargate atrás de ALB → front em CloudFront (+S3 ou Fargate) · Bedrock · CloudWatch · Secrets Manager | Tudo AWS |
 
@@ -140,7 +140,7 @@ Para cada uma: escolha principal + alternativas testadas + **quanto a taxa de re
 | BDR-004 | **Retorno em 7 dias** | nova sessão iniciada após o fim da 1ª sessão e até 7×24h depois do início dela | ≥1h depois; dia-calendário seguinte | Taxa muda bastante; justificar |
 | BDR-005 | **Fuso / dia** | `America/Sao_Paulo` para dia/semana; armazenar tudo em UTC | UTC | Coortes semanais deslocadas |
 | BDR-006 | **Período** | todo o período da base, **excluindo** usuários sem 7 dias observáveis (censura à direita) e semanas iniciais de aquecimento | recorte de N meses | Taxa artificialmente baixa no fim |
-| BDR-007 | **Filtro Brasil** | conversa com `country='Brazil'` | usuário cuja maioria das conversas é BR | VPN/roaming |
+| BDR-007 | **Filtro Brasil** | conversa com `country='Brazil'` (**aceito 11/11**, ver `docs/bdr/BDR-007`) | `OR language='Portuguese'` (rejeitada: traz outros países lusófonos) | VPN/roaming; base pequena |
 | BDR-008 | **O que conta como uso** | conversa com ≥1 turno de usuário não vazio | excluir conversas só com saudação | Ruído de "testes" |
 | BDR-009 | **Tema** | taxonomia fechada de ~8–10 temas (estudo/escola, trabalho/escrita profissional, programação, tradução, criativo/ficção, conselhos pessoais, conhecimento geral, roleplay/entretenimento, outro) | — | Tema ambíguo |
 | BDR-010 | **Recusa** | assistente recusa/evita a tarefa (regex PT/EN + LLM) | só regex | Subestimar recusas |
@@ -314,7 +314,7 @@ Consequências / o que muda se a premissa estiver errada: ...
 |---|---|---|
 | 001 | Base analítica em PostgreSQL | proposto |
 | 002 | **Backend em Flask + flask-smorest** (vs. FastAPI, Django REST) — familiaridade do time, OpenAPI automático pelos schemas marshmallow, Blueprints | **aceito** |
-| 003 | Frontend: Next.js + Recharts × Streamlit consumindo a API | **em aberto (decidir no Dia 2)** |
+| 003 | Frontend: Streamlit com tema, consumindo a API | **aceito (11/11)** |
 | 004 | **Classificação com Bedrock — Claude Haiku 4.5, Batch Inference, pré-calculada e versionada**; validação com amostra manual; orçamento e teto de gasto (§12.1); alternativa avaliada: Amazon Nova Lite/Micro | **aceito** |
 | 005 | Pré-cálculo na carga + cache com invalidação por versão da carga | proposto |
 | 006 | Arquitetura AWS (S3, ECS Fargate, Bedrock, RDS, ElastiCache, CloudFront, CloudWatch, Secrets Manager) | proposto |
@@ -428,6 +428,10 @@ Consequências:
 Fórmula: `custo = N × (tokens_in × preço_in + tokens_out × preço_out) × fator_batch`
 
 **Cenários (N = conversas classificadas; medir o N real no Dia 1 e atualizar)**
+
+> **Atualização 10/11 (N medido):** o Brasil tem **2.385 usuários** (`hashed_ip`) e **11.621 conversas**.
+> Primeiras conversas: ≈ US$ 3,5 on-demand / US$ 1,7 batch. Todas as conversas BR: ≈ US$ 17 / US$ 8,5.
+> Os cenários abaixo superestimavam o volume em ~12×; o teto do AWS Budgets pode cair para US$ 10/20.
 
 | N | On-demand | Batch |
 |---|---|---|

@@ -1,0 +1,29 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Segredos
+.env
+*.pem
+
+# Base bruta completa (3,36 GB) — baixada por etl/download.py
+data/raw/wildchat-1m/
+*.part
+
+# Artefatos locais
+data/work/
+*.duckdb
+*.duckdb.wal
+
+# Node
+node_modules/
+.next/
+
+# Editor / SO
+.vscode/
+.idea/
+.DS_Store

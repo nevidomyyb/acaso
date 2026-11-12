@@ -1,0 +1,10 @@
+line-length = 120
+target-version = "py312"
+extend-exclude = ["*.ipynb"]  # a fonte dos notebooks é o .py pareado (jupytext)
+
+[lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[lint.per-file-ignores]
+"etl/recusa_regex.py" = ["E501"]  # regex longas ficam mais legíveis numa linha só
+"analysis/[0-9]*.py" = ["E402", "I001", "E731", "F821", "E501", "B018"]  # notebooks: ordem de célula e display()
