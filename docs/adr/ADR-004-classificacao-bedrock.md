@@ -1,6 +1,6 @@
 # ADR-004 — Classificação de tema e recusa com Bedrock em batch
 
-**Status:** aceito · 2026-11-11
+**Status:** substituído no desafio pelo ADR-011 (conta AWS sem cota no Bedrock) · alvo em produção · 2026-11-12
 
 ## Contexto
 Tema e recusa da 1ª conversa são fatores candidatos do retorno. A base não tem esses campos. O LLM precisa ficar na AWS. O `docker compose up` precisa subir sem credenciais.

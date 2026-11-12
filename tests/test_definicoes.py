@@ -134,3 +134,13 @@ def test_falha_de_coleta_na_janela_tira_do_denominador(base, tmp_path):
     assert m["K"].janela_com_lacuna and not m["L"].janela_com_lacuna
     ids = set(elegiveis(u, d).usuario_id)
     assert m["K"].name not in ids and m["L"].name in ids
+
+
+def test_grupo_tema_cobre_os_11_temas_em_7_grupos():
+    # BDR-009: todo tema do prompt tem grupo; nenhum grupo inventado.
+    from classify_bedrock import TEMAS
+    from definicoes import GRUPO_TEMA, RECUSA_FATOR
+
+    assert set(GRUPO_TEMA) == set(TEMAS)
+    assert len(set(GRUPO_TEMA.values())) == 7
+    assert RECUSA_FATOR == ("total",)  # BDR-010: parcial fica fora (os dois detectores perdem 7 de 11)

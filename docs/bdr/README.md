@@ -13,7 +13,7 @@ Cada BDR mostra quanto o resultado muda com cada opção.
 | [006](BDR-006-periodo-e-censura.md) | Período e censura | aceito |
 | [007](BDR-007-filtro-brasil.md) | Filtro Brasil | aceito |
 | [008](BDR-008-o-que-conta-como-uso.md) | O que conta como uso | aceito |
-| 009 | Tema | proposto — a escrever após a classificação |
-| 010 | Recusa | proposto — a escrever após a classificação |
+| [009](BDR-009-tema.md) | Tema (7 grupos, 1ª conversa) | aceito |
+| [010](BDR-010-recusa.md) | Recusa (total pelo LLM, 1ª conversa) | aceito |
 
 Sensibilidade completa: `analysis/03_definicoes_sensibilidade.ipynb` (executado, com as saídas). Código das definições: `etl/definicoes.py`; testes: `tests/test_definicoes.py`.

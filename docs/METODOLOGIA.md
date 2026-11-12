@@ -471,23 +471,43 @@ desafio: como perceber que um número mudou antes do cliente.
 
 ---
 
-## 7. A classificação: código pronto, sem execução
+## 7. A classificação: LLM aberto em CPU numa EC2
 
-Esta é a única parte do projeto sem resultado.
+O Bedrock está bloqueado na conta nova, em todos os modelos, e a cota de GPU é 0 (ADR-011). O enunciado exige
+que o LLM rode na AWS. Por isso o tema e a recusa saem de um LLM aberto numa EC2 só com CPU.
 
-- [../etl/classify_bedrock.py](../etl/classify_bedrock.py): 5 comandos (`amostra`, `preparar-batch`,
-  `enviar-batch`, `status`, `coletar`). Testado até a chamada da AWS.
-- [../etl/prompts/classificacao_v1.md](../etl/prompts/classificacao_v1.md): 11 temas, regras de desempate,
-  recusa em 3 níveis, e instrução para tratar o conteúdo como dado.
-- A saída usa `tool_choice` obrigatório, com temperatura 0. O modelo não responde texto livre; ele só preenche o
-  esquema.
-- `regra_vazio`: conversa com entrada vazia recebe classificação por regra, sem gasto de chamada.
-- [../etl/recusa_regex.py](../etl/recusa_regex.py): 10 padrões PT/EN nos primeiros 400 caracteres. Serve como
-  checagem cruzada do LLM e como contingência.
+| Peça | O que faz |
+|---|---|
+| [../etl/classificar_cpu.py](../etl/classificar_cpu.py) | Seleciona as 3.361 conversas da 1ª sessão, monta o corpo de cada requisição, envia ao S3 e coleta |
+| [../etl/llm_runner.py](../etl/llm_runner.py) | Roda na EC2: chama o llama-server, grava uma linha por conversa, retoma de onde parou |
+| [../infra/aws/ec2/](../infra/aws/ec2/) | Cria, acompanha e destrói a EC2; acesso só por SSM; modelos com revisão e SHA-256 fixados |
+| [../etl/prompts/classificacao_v2.md](../etl/prompts/classificacao_v2.md) | 11 temas, regras de desempate, recusa em 3 níveis, conteúdo tratado como dado |
+| [../etl/validacao_classificacao.py](../etl/validacao_classificacao.py) | Amostra de 151 para rótulo manual e acurácia ponderada pela base |
+| [../etl/recusa_regex.py](../etl/recusa_regex.py) | Checagem cruzada da recusa, por padrões PT/EN nos primeiros 400 caracteres |
 
-A entrada do teste está pronta: 199 registros em `data/work/batch_v1_amostra200/`. A conta AWS bloqueia o
-on-demand (cota 0) e o batch ("account is not authorized"), com caso aberto no Support. Por isso BDR-009 e
-BDR-010 seguem como propostos. Um BDR não recebe número sem medição.
+Três escolhas precisam de explicação:
+
+- **Escopo na 1ª sessão.** A pergunta é sobre a estreia. Classificar as 11.621 conversas em CPU levaria ~20 h.
+  As 3.361 da 1ª sessão levam ~6 h.
+- **Saída por gramática.** O llama.cpp só deixa o modelo gerar JSON que cabe no schema (o mesmo do ADR-004).
+  Assim nenhuma resposta sai fora do formato. O campo `motivo` tem limite de 90 caracteres, porque cada token de
+  saída custa ~50 ms em CPU.
+- **Acurácia ponderada.** A amostra de validação garante um mínimo de casos por tema. Por isso a média simples
+  da amostra superestima os temas raros. O número reportado pesa cada tema pelo tamanho dele na base.
+
+O ajuste usou 2 rodadas em 40 conversas (tabela no ADR-011). Essas 40 ficam fora da validação: medir nelas
+inflaria a acurácia.
+
+A validação manual (12/11) usa 151 conversas, rotuladas às cegas pela pessoa:
+
+| Medida | Resultado | Uso |
+|---|---|---|
+| Tema, 11 temas | 71,4% (IC 64,4–78,5%) | Só gráficos descritivos |
+| Tema, 7 grupos | 83,8% (IC 78,9–88,7%) | Fator do modelo (BDR-009) |
+| Recusa `total` pelo LLM | 8 de 9 marcadas são recusa; 5 de 5 totais achadas | Fator do modelo (BDR-010) |
+| Regex de recusa | 8 de 9; 4 de 5 | Sensibilidade |
+
+O tema e a recusa de cada usuário vêm da 1ª conversa da 1ª sessão. A sessão inteira mistura engajamento (BDR-010).
 
 ---
 
@@ -503,7 +523,7 @@ BDR-010 seguem como propostos. Um BDR não recebe número sem medição.
 | 546 conversas acima de 1h · máx. 11 dias | `fim_utc − inicio_utc` | notebook 01, seção 4 |
 | 1% dos IPs = 41% das conversas | curva acumulada | notebook 01, seção 5 |
 | IP dinâmico ≥ 2% | UA raro em outro IP em 7 dias | notebook 01, seção 6 |
-| Classificação ≈ US$ 9 | 11.621 × 1.230 tokens × preço de batch | PROJECT.md §12.1 |
+| Classificação ≈ US$ 5 | c7i.4xlarge ≈ US$ 0,71/h × ~7 h (ADR-011) | `classificacao.sh log`; fatura da EC2 |
 
 ---
 

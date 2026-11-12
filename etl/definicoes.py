@@ -27,6 +27,24 @@ CHAVES_USUARIO = {
 REGRAS_RETORNO = ("nova_sessao", "apos_1h", "dia_seguinte")
 UNIDADES = ("turno", "conversa")
 
+# BDR-009: tema da 1ª conversa da 1ª sessão, em 7 grupos (validação manual de 12/11: 83,8% ponderada,
+# contra 71,4% nos 11 temas). Os 11 temas ficam só nos gráficos descritivos.
+GRUPO_TEMA = {
+    "conhecimento_geral": "tarefa_conhecimento",
+    "estudo_escola": "tarefa_conhecimento",
+    "trabalho_profissional": "tarefa_conhecimento",
+    "criativo_ficcao": "criativo_entretenimento",
+    "roleplay_personagem": "criativo_entretenimento",
+    "conteudo_adulto": "criativo_entretenimento",
+    "saudacao_teste": "saudacao_teste",
+    "programacao_tecnologia": "programacao_tecnologia",
+    "traducao_reescrita": "traducao_reescrita",
+    "conselho_pessoal": "conselho_pessoal",
+    "outro": "outro",
+}
+# BDR-010: o fator é recusa `total` pelo LLM na 1ª conversa da 1ª sessão; o regex e a sessão inteira são sensibilidade.
+RECUSA_FATOR = ("total",)
+
 
 @dataclass(frozen=True)
 class Definicoes:

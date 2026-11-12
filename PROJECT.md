@@ -60,7 +60,7 @@
 | Discovery/análise | Python, DuckDB, pandas, statsmodels, scikit-learn, notebooks | DuckDB lê parquet direto, roda fora da memória e usa SQL próximo do Postgres (ADR-010); statsmodels dá IC pronto |
 | Base analítica | PostgreSQL 16 | Domínio; SQL dos indicadores fica explícito; em produção = RDS/Aurora |
 | Carga (ETL) | Container Python `etl` que roda e termina no `compose up` | "Carregar a partir da bruta" fica literal |
-| Classificação de tema/recusa | **Amazon Bedrock — Claude Haiku 4.5 via Batch Inference** (ADR-004), **pré-calculada** e versionada em `data/enriched/` | Fica na AWS; o dashboard não depende de LLM em tempo real; o `compose up` roda sem credenciais; custo ≈ US$ 9 para as 11.621 conversas (§12.1) |
+| Classificação de tema/recusa | **LLM aberto (Qwen3-8B) em CPU numa EC2** (ADR-011, 12/11), **pré-calculada** e versionada em `data/enriched/`. O Bedrock (ADR-004) fica como alvo em produção | A conta nova não tem cota no Bedrock nem GPU; fica na AWS; o dashboard não depende de LLM em tempo real; o `compose up` roda sem credenciais; custo ≈ US$ 5 para as 3.361 conversas da 1ª sessão |
 | Backend | **Flask + flask-smorest** (schemas marshmallow), servido por gunicorn | Familiaridade com Flask; smorest valida entrada/saída pelos schemas e gera OpenAPI/Swagger automaticamente; Blueprints organizam os endpoints (ADR-002) |
 | Cache da API | Flask-Caching (Redis local; ElastiCache em produção) | Invalidação por versão da carga (§6.4) |
 | Frontend | **Streamlit com tema próprio, consumindo a API** (ADR-003 aceito em 11/11) | Trade-off tempo × percepção de produto |
@@ -165,8 +165,8 @@ Para cada uma: escolha principal + alternativas testadas + **quanto a taxa de re
 | BDR-006 | **Período** | todo o período; tira 48 censurados e 87 usuários com falha de coleta na janela (**aceito**; falha = volume global < 15% da mediana) | manter os censurados; limiar de 25% (marca feriados como falha) | Taxa baixa no fim da base; coortes vizinhas subestimadas |
 | BDR-007 | **Filtro Brasil** | conversa com `country='Brazil'` (**aceito**) | `OR language='Portuguese'` (rejeitada: traz outros países lusófonos) | VPN e roaming; base pequena |
 | BDR-008 | **O que conta como uso** | conversa com ≥ 1 mensagem não vazia (**aceito**; 76 conversas saem) | manter as vazias (≤ 0,2 p.p.) | Ruído de "testes" |
-| BDR-009 | **Tema** | taxonomia fechada de 11 temas, em `etl/prompts/classificacao_v1.md` (**pendente**: depende do Bedrock) | — | Tema ambíguo |
-| BDR-010 | **Recusa** | 3 níveis (não, parcial, total) pelo LLM, com o regex PT/EN como checagem cruzada (**pendente**: depende do Bedrock) | só regex | Subestimar as recusas |
+| BDR-009 | **Tema** | 11 temas do prompt v2 agrupados em **7 grupos**; tema da 1ª conversa da 1ª sessão (aceito 12/11; acerto 83,8%) | 11 temas (71,4%) | Tema ambíguo |
+| BDR-010 | **Recusa** | recusa **total** pelo LLM na 1ª conversa (aceito 12/11; 8 de 9 corretas) | regex; sessão inteira | Subestimar as recusas parciais |
 
 **Resultado com as definições aceitas:** retorno em 7 dias de **28,6%** (IC 26,8–30,5%), com denominador de 2.219 usuários e 635 retornos. A tabela completa de sensibilidade está em `analysis/03_definicoes_sensibilidade.ipynb`, e cada decisão em `docs/bdr/`. A versão das definições fica em `etl/definicoes.py` (`VERSAO_DEFINICOES`).
 

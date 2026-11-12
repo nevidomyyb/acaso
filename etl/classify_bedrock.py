@@ -112,11 +112,16 @@ def entrada_vazia(e: dict) -> bool:
     return not e["msg_usuario"].strip()
 
 
-def corpo_requisicao(e: dict, sistema: str) -> dict:
-    texto = (
+def texto_entrada(e: dict) -> str:
+    """O que o modelo lê: 1ª mensagem e 1ª resposta, truncadas. Igual para Bedrock e CPU."""
+    return (
         f"<mensagem_pessoa>\n{truncar(e['msg_usuario'], MAX_CHARS_USUARIO)}\n</mensagem_pessoa>\n\n"
         f"<resposta_assistente>\n{truncar(e['msg_assistente'], MAX_CHARS_ASSISTENTE)}\n</resposta_assistente>"
     )
+
+
+def corpo_requisicao(e: dict, sistema: str) -> dict:
+    texto = texto_entrada(e)
     return {
         "anthropic_version": "bedrock-2023-05-31",
         "max_tokens": MAX_TOKENS,
@@ -138,14 +143,18 @@ def interpretar(saida: dict) -> dict:
     blocos = [b for b in saida.get("content", []) if b.get("type") == "tool_use"]
     if not blocos:
         return {**base, "erro": f"sem tool_use (stop_reason={saida.get('stop_reason')})"}
-    dados = blocos[0].get("input", {})
+    return validar(blocos[0].get("input", {}), base)
+
+
+def validar(dados: dict, base: dict) -> dict:
+    """Confere os campos da classificação (mesma regra para qualquer modelo). Devolve campos ou `erro`."""
     tema, recusa, conf = dados.get("tema"), dados.get("recusa"), dados.get("confianca")
     if tema not in TEMAS or recusa not in RECUSAS or not isinstance(conf, int | float) or not 0 <= conf <= 1:
         return {**base, "erro": f"saída inválida: {json.dumps(dados, ensure_ascii=False)[:200]}"}
     return {**base, "tema": tema, "recusa": recusa, "confianca": float(conf), "motivo": dados.get("motivo")}
 
 
-def linha_resultado(e: dict, resultado: dict, fonte: str, versao: str) -> dict:
+def linha_resultado(e: dict, resultado: dict, fonte: str, versao: str, modelo: str = MODELO) -> dict:
     return {
         "conversa_id": e["conversa_id"],
         "tema": resultado.get("tema"),
@@ -154,7 +163,7 @@ def linha_resultado(e: dict, resultado: dict, fonte: str, versao: str) -> dict:
         "motivo": resultado.get("motivo"),
         "recusa_regex": recusa_regex(e["msg_assistente"]),
         "fonte": fonte,
-        "modelo": MODELO if fonte == "llm" else None,
+        "modelo": modelo if fonte == "llm" else None,
         "versao_prompt": versao,
         "input_tokens": resultado.get("input_tokens"),
         "output_tokens": resultado.get("output_tokens"),
