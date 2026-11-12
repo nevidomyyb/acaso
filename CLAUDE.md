@@ -61,7 +61,8 @@ Use em **todo documento** do projeto (ADR, BDR, README, docs/, relatório, e-mai
 - Testes: `.venv/bin/python -m pytest -q` (base sintética em `tests/conftest.py`). Lint: `.venv/bin/ruff check analysis etl tests`.
 - **Notebooks:** fonte = `analysis/NN_*.py` (jupytext, formato percent); gerar/executar com `cd analysis && ../.venv/bin/jupytext --to ipynb --execute NN_x.py`. Estilo dos gráficos em `analysis/estilo.py` (paleta da skill dataviz; rodapé com fonte via `nota()`). Sempre olhar os PNGs gerados antes de concluir.
 - Classificação: `etl/classify_bedrock.py {amostra|preparar-batch|enviar-batch|status|coletar}`; prompt em `etl/prompts/classificacao_v1.md`; regex de recusa em `etl/recusa_regex.py`. Usa **boto3** (mesmo corpo no on-demand e no batch).
-- Enunciado original: PDF em `docs/` e texto em `docs/desafio/enunciado.txt` (grep-ável).
+- Enunciado original: PDF em `docs/` e texto em `docs/desafio/enunciado.txt` (grep-ável). A janela de 7 dias é **exigência do enunciado** (linha 35), não escolha nossa ⇒ `janela_retorno_dias` não tem variante na sensibilidade.
+- **`docs/METODOLOGIA.md`** explica a origem de cada número: ADR × BDR, sensibilidade, IC, cada query de `definicoes.py`, cada notebook e cada teste. Atualize junto com os números. O §10 tem o resumo das definições para a apresentação.
 - Início da conversa = timestamp da **1ª resposta do assistente** (`list_min` dos timestamps dos turnos), nunca o `timestamp` de topo.
 - Máquina: 15 GB RAM (≈ 6 GB livres), 12 núcleos. DuckDB com `memory_limit` explícito e `SET TimeZone='UTC'`.
 - **Segredos:** `.env` (gitignored, `chmod 600`) tem `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION` (preenchidos em 11/11) e `ACASO_S3_BUCKET`, `ACASO_BEDROCK_ROLE_ARN` (vazios até a pessoa criar). Modelo em `.env.example`. No compose, use `env_file: [{path: .env, required: false}]` para subir sem o arquivo. Nunca leia nem imprima os valores do `.env` (para checar, mascare: `awk -F= ...`).
@@ -80,10 +81,10 @@ Use em **todo documento** do projeto (ADR, BDR, README, docs/, relatório, e-mai
 - DuckDB 2.0: lambda com sintaxe `lambda c: c.campo`. A seta `->` dá erro.
 
 **Brasil (`country = 'Brazil'`)** — medido em 10/11 com `analysis/00_contagens_iniciais.py`
-- **11.621 conversas, 2.385 `hashed_ip`** (1,4% da base), 2023-04-09 → 2024-04-29 (57 semanas).
+- **11.621 conversas, 2.385 `hashed_ip`** (1,4% da base), 2023-04-09 → 2024-04-29 (386 dias = 55 semanas corridas; 57 semanas de calendário, porque a 1ª e a última são parciais).
 - **Base pequena:** mediana de **41 novos IPs/semana** (mín. 9, máx. 100) ⇒ visão principal **mensal**; semanal só como detalhe.
 - 1.424 de 2.385 usuários (60%) têm **uma única conversa**.
-- **Concentração:** top 1% dos IPs (≥ 44 conversas) = 42% das conversas. 1 IP tem **1.557 conversas e 35 user-agents** (13% do BR). Precisa de regra de exclusão/flag.
+- **Concentração:** top 1% dos IPs (23 IPs, ≥ 52 conversas) = 41% das conversas (conferido em 12/11). 1 IP tem **1.557 conversas e 35 user-agents** (13% do BR). Precisa de regra de exclusão/flag.
 - Qualidade: 273 conversas com entrada vazia; 56 `redacted`; 51 sem `state`; 0 sem user-agent; 211 atravessam o dia (UTC); 546 duram > 1h.
 - Idioma: 76% Portuguese; 2.824 conversas (24%) em outro idioma (English é o 2º).
 - **Modelo confundido com o tempo:** não há GPT-4 no BR entre 2023-06-24 e 2023-11-07. Versões: 3.5-0301 → 0613 (2023-06-28) → 0125 (2024-02-18); gpt-4-1106-preview entra em 2023-11-07; 0125-preview em 2024-03-14.
@@ -99,7 +100,7 @@ Use em **todo documento** do projeto (ADR, BDR, README, docs/, relatório, e-mai
 - Idioma: 76% PT, 16% EN; "Latin/Finnish/Nolang" = ruído em mensagens curtas ⇒ fator idioma em 3 níveis. Estado: 10 de 28 valores com < 20 usuários ⇒ "outros". 76 conversas sem nenhuma msg de usuário; 65 só com a 1ª vazia.
 
 **Retorno em 7 dias (padrão, `analysis/03_definicoes_sensibilidade.ipynb`)**
-- **28,6% (IC 26,8–30,5%)**, denominador 2.219 (2.354 usuários → 2.306 observáveis → 2.219 sem falha de coleta), 635 voltaram.
+- **28,6% (IC 26,8–30,5%)**, denominador 2.219, 635 voltaram. Funil conferido em 12/11: 2.385 IPs → 2.354 usuários (−31 IPs só com conversa sem conteúdo, BDR-008) → 2.306 observáveis (−48 censurados) → **2.219** (−87 com falha de coleta). O denominador é a **coorte de novatos**: cada pessoa entra uma vez, na 1ª sessão; não é "quem usou no período".
 - Sensibilidade (Δ p.p.): gap 15 min +5,4 · gap 60 min −3,5 · retorno "outro dia" −9,7 · atividade por conversa −4,3 · IP+UA +2,2 · retorno > 1h −1,6 · aquecimento 2/4 sem −0,4/−0,8 · demais ≤ 0,2. "Referência do incidente" (IP+UA, conversa, > 1h) = 26,0%.
 - IC médio: semanal ±15 p.p. (mediana 39 pessoas/semana); mensal ±7 p.p. Meses fora do padrão: abr/2023 40,3% (lançamento) e jan/2024 41,5% (n = 53, férias) ⇒ candidatos para o notebook 05 (mix × taxa).
 
@@ -129,15 +130,18 @@ Use em **todo documento** do projeto (ADR, BDR, README, docs/, relatório, e-mai
 - **10/11 (Dia 1):** repo estruturado; `.venv`; bruta baixada e verificada; recorte Brasil; contagens iniciais; ADR-002/004/010; dúvidas rascunhadas.
 - **11/11 (Dia 2, madrugada):** `.env` + IAM em `infra/aws/iam/`; padrão ASD-STE100; ADRs enxutos; BDR-007.
 - **11/11 (Dia 2):** enunciado lido e extraído; classificador pronto (`etl/classify_bedrock.py`, prompt v1, regex de recusa) e testado até a chamada (bloqueado pelo formulário da Anthropic); `etl/definicoes.py` + `etl/estatistica.py` + 10 testes passando; notebooks `01_discovery` e `03_definicoes_sensibilidade` executados; BDR-001 a 006 e 008 escritos; ADR-003 proposto; `docs/RISCOS.md` iniciado. Nada commitado.
+- **12/11 (Dia 3, manhã):** AWS — plano migrado para pago e verificado; bucket + role criados; `.env` completo; batch barrado pela conta (caso no Support). PROJECT.md auditado contra o repo: 12 trechos vencidos corrigidos (estrutura §3.2 com os arquivos reais e a descrição de cada um; §4 trazia a escolha antiga de BDR-002/003/006; custo do Bedrock US$ 25–45 → ≈ US$ 9; coorte mensal, estado agrupado, sem `toxic`; 4 riscos novos; cronograma; 2 tabelas quebradas). Escrito `docs/METODOLOGIA.md`: origem de cada número, ADR × BDR, sensibilidade, IC de Wilson, cada query, notebook e teste. Funil e 2 números reconferidos. Notas da apresentação revisadas (§10 do METODOLOGIA). Nada commitado ainda.
 
 ## Pendências que dependem da pessoa
-- **Bedrock — caso no AWS Support (urgente):** os 2 pedidos de cota abriram casos (`CASE_OPENED`, 11/11 tarde). Responder num deles pedindo também a liberação do batch (texto sugerido no chat de 11/11). Se liberar: `classify_bedrock.py --amostra-n 200 enviar-batch` (entrada pronta).
-- AWS Budgets: existe ("My Monthly Cost Budget", US$ 20/mês).
+- **Bedrock — caso no AWS Support (urgente, bloqueia BDR-009/010):** os 2 pedidos de cota abriram casos (`CASE_OPENED`, 12/11). Responda num deles e peça também a liberação do **batch**. Texto pronto em `infra/aws/iam/README.md`, seção "Caso no AWS Support". Quando liberar: `.venv/bin/python etl/classify_bedrock.py --amostra-n 200 enviar-batch` (entrada já preparada).
 - Validação manual da classificação: rotular ~150 conversas (amostra gerada após o batch).
-- Enviar as dúvidas (qua 11/11). Pedir o primeiro commit quando quiser.
+- Preencher as horas de cada dia em `docs/USO_DE_IA.md` (hoje `_preencher_`). O desafio pede o total.
+- Dúvidas: prazo venceu em 11/11 e não foram enviadas. As premissas de `docs/DUVIDAS.md` valem e estão nos BDRs. Decida se envia mesmo atrasado.
+- Pedir o primeiro commit quando quiser (nada commitado depois de `6e763d8`).
+- Pronto, sem ação: AWS Budgets ("My Monthly Cost Budget", US$ 20/mês) e plano pago.
 
 ## Próximos passos
 1. Quando o Bedrock liberar: `classify_bedrock.py amostra --n 200` → revisar → ajustar prompt (máx. 2 rodadas) → `preparar-batch` → `enviar-batch` → `status` → `coletar` → BDR-009/010 + amostra de validação.
-2. Dia 3: tabela `primeira_experiencia` (features da 1ª sessão: modelo, tema, recusa, turnos, tamanho de resposta, horário/dia local, idioma 3 níveis, dispositivo, estado agrupado) em `etl/` + `analysis/02_eda` (só gráficos com conclusão).
+2. **Dia 3 (próximo):** `etl/primeira_experiencia.py` (features da 1ª sessão: modelo, turnos, tamanho de resposta, horário/dia local, idioma 3 níveis, dispositivo, estado agrupado; tema e recusa entram depois do Bedrock) + `analysis/02_eda` (só gráficos com conclusão). Não depende do Bedrock.
 3. Dia 4: `04_efeitos_e_confusao` (logística + efeito marginal em p.p. com IC; IPW para GPT-4 só nos períodos com os dois modelos; bruto × ajustado) e `05_semana_atipica` (mix × taxa; abr/2023 e jan/2024; falhas de coleta).
 4. Dia 5: Postgres + carga + Flask-smorest + Streamlit com tema (ADR-003).

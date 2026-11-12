@@ -38,3 +38,50 @@ Sem estes passos, o `InvokeModel` falha com `ResourceNotFoundException: Model us
 5. Se a resposta for `AccessDeniedException`, o acordo está pendente. A AWS envia um e-mail quando ele termina. Para ver o status: `aws bedrock get-foundation-model-availability --model-id anthropic.claude-haiku-4-5-20251001-v1:0` (campo `agreementAvailability`).
 
 A conta precisa de uma forma de pagamento válida para compras no Marketplace. Depois do 1º acesso, o `acaso-etl` invoca o modelo sem permissões do Marketplace.
+
+## Caso no AWS Support (conta nova com Bedrock bloqueado)
+
+Situação em 12/11/2026: a conta está no plano pago, o modelo aparece como `AUTHORIZED`/`AVAILABLE`, mas as duas vias falham.
+
+| Via | Erro |
+|---|---|
+| On-demand (`InvokeModel`) | `ThrottlingException: Too many tokens per day`; cotas RPM e TPM em 0 |
+| Batch (`CreateModelInvocationJob`) | `ValidationException: Your account is not authorized to perform this action` |
+
+O bloqueio é da conta, não do IAM nem da cota. Só o Support libera. Os 2 pedidos de cota de 12/11 abriram casos (`CASE_OPENED`). Responda num deles com o texto abaixo, em inglês.
+
+```
+Hello,
+
+This account moved from the Free plan to the Paid plan on 2026-11-11.
+I need Amazon Bedrock access to Anthropic Claude Haiku 4.5 in us-east-1. Two calls fail:
+
+1. CreateModelInvocationJob (batch inference) returns:
+   "ValidationException: Your account is not authorized to perform this action.
+   Please create a support case."
+2. InvokeModel with the inference profile us.anthropic.claude-haiku-4-5-20251001-v1:0
+   returns "ThrottlingException: Too many tokens per day".
+   The applied quotas L-CCA5DF70 and L-58BE175A are 0.
+
+Model access is granted (agreementAvailability = AVAILABLE,
+authorizationStatus = AUTHORIZED). The Anthropic use case form is submitted.
+
+Use case: a one-off classification of 11,621 conversations from the public
+WildChat-1M dataset (ODC-BY license) for a product retention analysis.
+Each record gets a topic label and a refusal label.
+Volume: one test batch job of 199 records, then one batch job of about
+14 million input tokens. Expected cost: below USD 20. A monthly AWS Budget
+of USD 20 is active.
+
+Please:
+- enable batch inference for this account;
+- set the on-demand quotas for Claude Haiku 4.5 to the default values
+  (10,000 requests per minute and 5,000,000 tokens per minute),
+  or to a lower value you can approve.
+
+Thank you.
+```
+
+O Service Quotas recusa pedido abaixo do valor padrão da AWS (`IllegalArgumentException`). O mínimo é 10.000 RPM (`L-CCA5DF70`) e 5.000.000 TPM (`L-58BE175A`).
+
+Para consultar plano e cotas, use o perfil padrão do AWS CLI (administrador). O `acaso-etl` não tem `freetier:*` nem `servicequotas:*`.

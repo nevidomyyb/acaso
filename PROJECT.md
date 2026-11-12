@@ -3,7 +3,7 @@
 
 > **Prazo de entrega:** segunda **16/11/2026, 23h59** → nathalia.anjos@aca.so e daniele.cardoso@aca.so
 > **Prazo para dúvidas:** **quarta 11/11** (mesmos e-mails). Sem resposta a tempo → registrar a premissa e seguir.
-> **Dedicação esperada:** ~12h (plano abaixo: ~16–18h, incluindo o item "a mais").
+> **Dedicação esperada pelo desafio:** ~12h. Este plano prevê ~20h, com o item "a mais" (§14).
 > **Depois:** conversa de 60 min com o gestor = 20 min de apresentação + 40 min de entrevista técnica (fluxo de construção, decisões registradas, o que faria diferente).
 
 ---
@@ -29,7 +29,7 @@
 | Dashboard | Não técnico entende sozinho; efeito com incerteza e fonte | §6 |
 | Construção e código | Sobe do zero; dados reais; código legível e testado; decisões registradas | §3, §7, §8.3, §10 |
 | Clareza e premissas | Documento objetivo; premissas, riscos e escalonamentos explícitos | §4, §11, `docs/RELATORIO.md` |
-| Apresentação | Explicar em 20 min e defender escolhas | §14 |
+| Apresentação | Explicar em 20 min e defender escolhas | §16 |
 | Uso de IA | IA com critério e conferida | §12 |
 
 ---
@@ -60,7 +60,7 @@
 | Discovery/análise | Python, DuckDB, pandas, statsmodels, scikit-learn, notebooks | DuckDB lê parquet direto, roda fora da memória e usa SQL próximo do Postgres (ADR-010); statsmodels dá IC pronto |
 | Base analítica | PostgreSQL 16 | Domínio; SQL dos indicadores fica explícito; em produção = RDS/Aurora |
 | Carga (ETL) | Container Python `etl` que roda e termina no `compose up` | "Carregar a partir da bruta" fica literal |
-| Classificação de tema/recusa | **Amazon Bedrock — Claude Haiku 4.5 via Batch Inference** (decidido), **pré-calculada** e versionada em `data/enriched/` | Fica na AWS; dashboard não depende de LLM em tempo real; `compose up` roda sem credenciais; custo estimado ~US$ 25–45 (§12.1) |
+| Classificação de tema/recusa | **Amazon Bedrock — Claude Haiku 4.5 via Batch Inference** (ADR-004), **pré-calculada** e versionada em `data/enriched/` | Fica na AWS; o dashboard não depende de LLM em tempo real; o `compose up` roda sem credenciais; custo ≈ US$ 9 para as 11.621 conversas (§12.1) |
 | Backend | **Flask + flask-smorest** (schemas marshmallow), servido por gunicorn | Familiaridade com Flask; smorest valida entrada/saída pelos schemas e gera OpenAPI/Swagger automaticamente; Blueprints organizam os endpoints (ADR-002) |
 | Cache da API | Flask-Caching (Redis local; ElastiCache em produção) | Invalidação por versão da carga (§6.4) |
 | Frontend | **Streamlit com tema próprio, consumindo a API** (ADR-003 aceito em 11/11) | Trade-off tempo × percepção de produto |
@@ -69,62 +69,85 @@
 
 ### 3.2 Estrutura do repositório
 
+Estado em 12/11. **(D5)** = previsto para o Dia 5 do cronograma (§13), e assim por diante.
+
 ```
-acaso-retencao/
-├── README.md                  # como subir, o que cada tela mostra, links pros docs
-├── docker-compose.yml
-├── .env.example
+acaso/
+├── README.md                   # como subir, como refazer a base bruta, índice dos documentos
+├── PROJECT.md                  # este plano
+├── CLAUDE.md                   # memória do projeto: decisões aceitas, fatos dos dados, status
+├── requirements-analysis.txt   # dependências da análise, com versão fixada
+├── ruff.toml · pytest.ini      # lint (linha de 120) e testes
+├── .env.example                # modelo do .env: credenciais AWS, bucket e role do batch
+├── docker-compose.yml          # (D5) Postgres + carga + API + dashboard
+│
 ├── data/
-│   ├── raw/                   # recorte Brasil (ou script que baixa)
-│   └── enriched/              # tema/recusa classificados (Bedrock) + amostra validada
+│   ├── raw/
+│   │   ├── wildchat-1m/        # base pública completa, 3,36 GB (fora do git)
+│   │   ├── wildchat_br.parquet # recorte Brasil, 22 MB (+ manifesto): a base bruta que a carga lê
+│   │   └── wildchat_volume_diario.parquet   # volume diário global → detecta falha de coleta
+│   ├── enriched/               # tema e recusa classificados no Bedrock, versionados no git
+│   └── work/                   # intermediários e entrada do batch (fora do git)
+│
 ├── etl/
-│   ├── extract.py             # lê bruto
-│   ├── transform.py           # usuário, sessão, 1ª experiência, retorno, features
-│   ├── load.py                # grava base analítica (idempotente)
-│   ├── classify_bedrock.py    # monta JSONL, dispara Batch Inference, lê resultado (modo reprocessar)
-│   ├── prompts/               # prompt de classificação versionado (v1, v2...)
-│   └── quality_checks.py      # checagens de qualidade + reconciliação
-├── db/
-│   ├── migrations/            # schema versionado
-│   └── views/                 # SQL de cada indicador
-├── analysis/
-│   ├── 01_discovery.ipynb
-│   ├── 02_eda.ipynb
-│   ├── 03_definicoes_sensibilidade.ipynb
-│   ├── 04_efeitos_e_confusao.ipynb
-│   └── 05_semana_atipica.ipynb
-├── backend/                   # Flask + flask-smorest
-│   ├── app/__init__.py        # create_app(), Api(), registro dos Blueprints
-│   ├── app/resources/         # Blueprints: kpis, coortes, fatores, perfis, saude
-│   ├── app/schemas/           # schemas marshmallow (entrada e saída)
-│   ├── app/queries/           # SQL dos indicadores (mesmo SQL de docs/INDICADORES.md)
-│   └── app/observability.py   # request_id, duração, logs estruturados
-├── frontend/
+│   ├── download.py             # baixa a WildChat-1M e confere o SHA-256 de cada parquet
+│   ├── recorte_brasil.py       # gera o recorte Brasil e o volume diário global
+│   ├── definicoes.py           # FONTE ÚNICA das definições (BDR-001 a 008):
+│   │                           #   conversas → eventos → sessões → usuários; `elegiveis()` = denominador
+│   ├── estatistica.py          # intervalo de confiança de Wilson
+│   ├── recusa_regex.py         # detecta recusa por regex PT/EN: checagem cruzada e contingência
+│   ├── classify_bedrock.py     # classificação no Bedrock: amostra, preparar/enviar/status/coletar batch
+│   ├── prompts/
+│   │   └── classificacao_v1.md # prompt de classificação, versionado
+│   ├── primeira_experiencia.py # (D3) features da 1ª sessão, 1 linha por usuário
+│   ├── carga.py                # (D5) popula o Postgres a partir da base bruta (idempotente)
+│   └── qualidade.py            # (D5) checagens de qualidade e reconciliação
+│
+├── analysis/                   # fonte em .py (jupytext, formato percent); o .ipynb é gerado
+│   ├── estilo.py               # paleta dos gráficos e rodapé com a fonte de cada número
+│   ├── 00_contagens_iniciais.py        # script: contagens do recorte e teste do incidente
+│   ├── 01_discovery.py                 # qualidade dos dados: 10 problemas e tratamento (§5.1)
+│   ├── 03_definicoes_sensibilidade.py  # taxa padrão, funil e sensibilidade das definições (§4)
+│   ├── 02_eda.py                       # (D3) padrões da 1ª experiência (§5.2)
+│   ├── 04_efeitos_e_confusao.py        # (D4) logística, efeito marginal, IPW (§5.3, §5.4)
+│   └── 05_semana_atipica.py            # (D4) decomposição mix × taxa (§5.5)
+│
 ├── tests/
+│   ├── conftest.py             # base sintética em memória, com retorno conhecido
+│   └── test_definicoes.py      # 10 testes das definições (pega mudança silenciosa)
+│
+├── infra/aws/iam/              # políticas de menor privilégio + README do 1º acesso ao Bedrock
+│
+├── db/                         # (D5) migrations do schema + SQL de cada indicador
+├── backend/                    # (D5) Flask + flask-smorest: resources, schemas, queries, observabilidade
+├── frontend/                   # (D5) Streamlit com tema próprio, lendo só a API
+│
 └── docs/
-    ├── RELATORIO.md           # documento curto: achados + decisões
-    ├── ARQUITETURA.md         # diagrama + componentes AWS + endpoints + modelo
-    ├── INDICADORES.md         # definição, fórmula, denominador, período, SQL
-    ├── INCIDENTE.md           # resposta da §4.2
-    ├── MONITORAMENTO.md
-    ├── RISCOS.md
-    ├── USO_DE_IA.md           # log contínuo + parágrafo final
-    ├── adr/                   # ADR-001...
-    └── bdr/                   # BDR-001...
+    ├── desafio/enunciado.txt   # texto do enunciado, para busca
+    ├── adr/                    # ADR-002, 003, 004, 010 (+ modelo e índice)
+    ├── bdr/                    # BDR-001 a 008 (+ modelo e índice)
+    ├── DUVIDAS.md              # dúvidas e a premissa de cada uma
+    ├── RISCOS.md               # riscos e decisões a escalar (§11)
+    ├── USO_DE_IA.md            # log contínuo e parágrafo final (§12)
+    ├── RELATORIO.md            # (D6) documento curto: achados e decisões
+    ├── ARQUITETURA.md          # (D6) diagrama, componentes AWS, endpoints, modelo
+    ├── INDICADORES.md          # (D6) definição, fórmula, denominador, período, SQL
+    ├── INCIDENTE.md            # (D6) resposta da §4.2
+    └── MONITORAMENTO.md        # (D6) o que registrar em cada camada
 ```
 
 ### 3.3 Modelo da base analítica (rascunho)
 
-- `dim_usuario` — `usuario_id`, `definicao_versao`, `primeira_vez_utc`, `estado`, `idioma_principal`, `dispositivo/navegador (derivado do UA)`.
-- `fato_conversa` — `conversa_id`, `usuario_id`, `inicio_utc`, `fim_utc`, `modelo`, `turnos`, `idioma`, `tema`, `recusa`, `tam_resposta_media`, `toxic`, `redacted`, `sessao_id`.
+- `dim_usuario` — `usuario_id`, `definicao_versao`, `primeira_vez_utc`, `estado_agrupado` (menos de 20 usuários → "outros"), `idioma_3_niveis` (PT, EN, outro), `dispositivo` (mobile ou desktop, derivado do UA).
+- `fato_conversa` — `conversa_id`, `usuario_id`, `inicio_utc`, `fim_utc`, `modelo`, `turnos`, `idioma`, `tema`, `recusa`, `tam_resposta_media`, `redacted`, `sessao_id`. Sem `toxic`: a base pública removeu as conversas tóxicas, e o campo é 0 em todo o Brasil.
 - `fato_sessao` — `sessao_id`, `usuario_id`, `inicio`, `fim`, `n_conversas`.
 - `primeira_experiencia` — 1 linha por usuário com **todas as features** da 1ª sessão + `voltou_7d` + `observavel_7d` (censura).
-- `agg_coorte_semanal` — pré-calculada (semana, perfil, novos, voltaram, taxa, IC).
+- `agg_coorte` — pré-calculada (granularidade `mes` ou `semana`, perfil, novos, voltaram, taxa, IC, `amostra_suficiente`). A visão principal é **mensal**, porque o IC semanal é de ±15 p.p. (decisão de 11/11).
 - `resultado_efeitos` — fator, nível, efeito, IC inferior/superior, método, n, versão do modelo.
 - `meta_carga` — execução, linhas lidas/gravadas/rejeitadas, checksum, duração, versão das definições.
 - `meta_reconciliacao` — indicador, valor no dashboard, valor recalculado da bruta, diferença, status ("a mais").
 
-**Nada de texto das conversas, hashed_ip ou user-agent completo na base que o dashboard lê.**
+**Nada de texto das conversas, `hashed_ip` ou user-agent completo na base que o dashboard lê.** Todo recorte exibido respeita k-anonimato, com k = 20.
 
 ---
 
@@ -134,25 +157,28 @@ Para cada uma: escolha principal + alternativas testadas + **quanto a taxa de re
 
 | # | Definição | Escolha inicial | Alternativas na sensibilidade | Risco se errada |
 |---|---|---|---|---|
-| BDR-001 | **Usuário** | `hashed_ip` | `hashed_ip + user-agent`; `hashed_ip + accept-language` | IP compartilhado (empresa/faculdade) junta pessoas → infla retorno; IP dinâmico separa uma pessoa → reduz retorno; UA muda em atualização de navegador → "novos" falsos (**é o incidente!**) |
-| BDR-002 | **Sessão** | conversas do mesmo usuário com intervalo < 30 min | 15 min, 60 min | Muda o que conta como "voltar" |
-| BDR-003 | **Primeira experiência** | primeira sessão do usuário na base (excluir quem já aparece nas 2 primeiras semanas → janela de "aquecimento" para não pegar usuário antigo como novo) | sem aquecimento; aquecimento de 4 semanas | Usuário antigo tratado como novo |
-| BDR-004 | **Retorno em 7 dias** | nova sessão iniciada após o fim da 1ª sessão e até 7×24h depois do início dela | ≥1h depois; dia-calendário seguinte | Taxa muda bastante; justificar |
-| BDR-005 | **Fuso / dia** | `America/Sao_Paulo` para dia/semana; armazenar tudo em UTC | UTC | Coortes semanais deslocadas |
-| BDR-006 | **Período** | todo o período da base, **excluindo** usuários sem 7 dias observáveis (censura à direita) e semanas iniciais de aquecimento | recorte de N meses | Taxa artificialmente baixa no fim |
-| BDR-007 | **Filtro Brasil** | conversa com `country='Brazil'` (**aceito 11/11**, ver `docs/bdr/BDR-007`) | `OR language='Portuguese'` (rejeitada: traz outros países lusófonos) | VPN/roaming; base pequena |
-| BDR-008 | **O que conta como uso** | conversa com ≥1 turno de usuário não vazio | excluir conversas só com saudação | Ruído de "testes" |
-| BDR-009 | **Tema** | taxonomia fechada de ~8–10 temas (estudo/escola, trabalho/escrita profissional, programação, tradução, criativo/ficção, conselhos pessoais, conhecimento geral, roleplay/entretenimento, outro) | — | Tema ambíguo |
-| BDR-010 | **Recusa** | assistente recusa/evita a tarefa (regex PT/EN + LLM) | só regex | Subestimar recusas |
+| BDR-001 | **Usuário** | `hashed_ip` (**aceito**) | `hashed_ip + user-agent` (+2,2 p.p.); `hashed_ip + accept-language` (−0,1) | IP compartilhado (empresa, faculdade) junta pessoas → infla o retorno; IP dinâmico separa uma pessoa → reduz o retorno; o UA muda em atualização de navegador → "novos" falsos (**é o incidente!**) |
+| BDR-002 | **Sessão** | atividade = **cada resposta do assistente**; gap de 30 min (**aceito**) | gap de 15 min (+5,4 p.p.); gap de 60 min (−3,5); atividade por conversa (−4,3) | Muda o que conta como "voltar" |
+| BDR-003 | **Primeira experiência** | 1ª sessão do usuário na base, **sem aquecimento** (**aceito**: a base começa em 09/04/2023) | aquecimento de 2 semanas (−0,4 p.p.); de 4 semanas (−0,8) | Usuário antigo tratado como novo |
+| BDR-004 | **Retorno em 7 dias** | nova sessão até 7×24h depois do início da 1ª (**aceito**) | retorno só depois de 1h (−1,6 p.p.); dia-calendário seguinte (−9,7) | A taxa muda até 9,7 p.p.; justificar |
+| BDR-005 | **Fuso / dia** | agrupa em `America/Sao_Paulo`; armazena tudo em UTC (**aceito**) | UTC (≤ 0,2 p.p.) | Coortes deslocadas |
+| BDR-006 | **Período** | todo o período; tira 48 censurados e 87 usuários com falha de coleta na janela (**aceito**; falha = volume global < 15% da mediana) | manter os censurados; limiar de 25% (marca feriados como falha) | Taxa baixa no fim da base; coortes vizinhas subestimadas |
+| BDR-007 | **Filtro Brasil** | conversa com `country='Brazil'` (**aceito**) | `OR language='Portuguese'` (rejeitada: traz outros países lusófonos) | VPN e roaming; base pequena |
+| BDR-008 | **O que conta como uso** | conversa com ≥ 1 mensagem não vazia (**aceito**; 76 conversas saem) | manter as vazias (≤ 0,2 p.p.) | Ruído de "testes" |
+| BDR-009 | **Tema** | taxonomia fechada de 11 temas, em `etl/prompts/classificacao_v1.md` (**pendente**: depende do Bedrock) | — | Tema ambíguo |
+| BDR-010 | **Recusa** | 3 níveis (não, parcial, total) pelo LLM, com o regex PT/EN como checagem cruzada (**pendente**: depende do Bedrock) | só regex | Subestimar as recusas |
 
-**Atenção:** `timestamp` = horário do **último** turno. Para início da conversa usar o timestamp do **primeiro turno** dentro de `conversation`.
+**Resultado com as definições aceitas:** retorno em 7 dias de **28,6%** (IC 26,8–30,5%), com denominador de 2.219 usuários e 635 retornos. A tabela completa de sensibilidade está em `analysis/03_definicoes_sensibilidade.ipynb`, e cada decisão em `docs/bdr/`. A versão das definições fica em `etl/definicoes.py` (`VERSAO_DEFINICOES`).
+
+**Atenção:** o `timestamp` de topo é o horário do **último** turno. Os turnos do usuário não têm timestamp (0 de 26.579). Por isso o início da conversa é o timestamp da **1ª resposta do assistente**.
 
 ---
 
 ## 5. Análise
 
 ### 5.1 Discovery e qualidade dos dados (registrar cada problema + tratamento)
-Checar e quantificar:
+
+**Feito em 11/11** (`analysis/01_discovery.ipynb`): 10 problemas, cada um com tratamento. Os números estão em `CLAUDE.md`. Itens checados:
 - `conversation_hash` **não é único** → duplicatas reais vs. conversas idênticas ("oi") de pessoas diferentes; definir chave (`turn_identifier` do 1º turno?).
 - Conversas que **atravessam dias** (timestamp do último turno ≠ início).
 - Timestamps fora de ordem, nulos, futuros; buracos na série (dias sem dados = coleta, não comportamento).
@@ -169,7 +195,7 @@ Checar e quantificar:
 - Curva de retenção (D1, D7, D30) por coorte.
 
 ### 5.3 Efeito de cada fator no retorno em 7 dias (com IC, ordenado)
-Fatores da 1ª experiência: modelo, tema, nº de turnos, tamanho e qualidade da resposta (proxy: tamanho, recusa, erro, resposta truncada), recusa, horário, dia da semana, idioma, toxic/redacted, dispositivo (mobile/desktop pelo UA).
+Fatores da 1ª experiência: modelo, tema, nº de turnos, tamanho da resposta, recusa, horário local, dia da semana, idioma em 3 níveis, `redacted`, dispositivo (mobile ou desktop pelo UA) e estado agrupado. O fator `toxic` sai da lista: a base pública removeu as conversas tóxicas, e o campo é 0 em todo o Brasil.
 - **Regressão logística multivariada** → apresentar como **diferença em pontos percentuais** (efeito marginal médio) com **IC 95%** (mais fácil para não técnico que odds ratio).
 - Bootstrap como checagem do IC.
 - Gráfico final: **forest plot** ordenado pelo tamanho do efeito.
@@ -200,16 +226,16 @@ Cada tela: **a pergunta que responde no título**, definição e fonte de cada n
 
 | Tela | Pergunta | Gráficos (e por quê) |
 |---|---|---|
-| 1. Visão geral de retenção | "Quantos experimentam e quantos voltam, ao longo do tempo?" | KPIs (novos, % retorno 7d com IC); **linha** de retorno semanal com faixa de IC (tendência no tempo); barras de novos por semana |
+| 1. Visão geral de retenção | "Quantos experimentam e quantos voltam, ao longo do tempo?" | KPIs (novos, % retorno 7d com IC); **linha** de retorno **mensal** com faixa de IC; barras de novos por mês; coorte semanal como detalhe |
 | 2. O que faz voltar | "Quais fatores da 1ª experiência mais pesam no retorno?" | **Forest plot** (efeito ajustado em p.p. ± IC, ordenado); toggle bruto × ajustado (mostra seleção); texto curto "o que isso prova / não prova" |
 | 3. Explorar coortes/perfis | "Para quem o assistente funciona melhor?" | Barras de retorno por tema/modelo/horário com IC; filtro por período |
 | 4. **Saúde dos dados ("a mais")** | "Os números deste dashboard batem com a base?" | Status por indicador, última carga, linhas rejeitadas, diferença dashboard × recálculo da bruta |
 
-**Base pequena demais:** se n < limiar (ex.: 100 usuários ou IC > ±10 p.p.), mostrar o número esmaecido com "amostra insuficiente" em vez de esconder silenciosamente.
+**Base pequena demais:** se o IC passar de ±10 p.p. (cerca de 80 usuários), mostre o número esmaecido, com o aviso "amostra insuficiente". Nunca esconda o número sem aviso. Motivo da regra: o IC da coorte semanal é de ±15 p.p., e o da mensal, de ±7 p.p.
 
 ### 6.2 Indicadores (em `docs/INDICADORES.md`)
 Para cada um: **definição, fórmula, numerador, denominador, período de referência, SQL, regra de amostra mínima**.
-- Novos usuários (semana)
+- Novos usuários (por mês; semana como detalhe)
 - Taxa de retorno em 7 dias (+ IC Wilson)
 - Efeito ajustado por fator (p.p. + IC)
 - % de 1ª conversa com recusa
@@ -221,8 +247,8 @@ Cada recurso é um `Blueprint` do smorest, com `@blp.arguments(SchemaEntrada, lo
 | Endpoint | Entrada | Saída |
 |---|---|---|
 | `GET /api/kpis` | `inicio`, `fim`, `pais` | novos, retorno 7d, IC, n, data da última carga |
-| `GET /api/retencao/coortes` | `inicio`, `fim`, `pais`, `dimensao?` | lista por semana: novos, voltaram_7d, taxa, IC, `amostra_suficiente` |
-| `GET /api/fatores/efeitos` | `pais`, `ajuste=bruto|ajustado` | fator, nível, efeito_pp, ic_inf, ic_sup, n, método |
+| `GET /api/retencao/coortes` | `inicio`, `fim`, `pais`, `granularidade=mes\|semana`, `dimensao?` | lista por coorte: novos, voltaram_7d, taxa, IC, `amostra_suficiente` |
+| `GET /api/fatores/efeitos` | `pais`, `ajuste=bruto\|ajustado` | fator, nível, efeito_pp, ic_inf, ic_sup, n, método |
 | `GET /api/perfis` | `dimensao`, `inicio`, `fim` | retorno por nível da dimensão + IC |
 | `GET /api/saude` ("a mais") | — | últimas cargas, checagens, reconciliação |
 | `GET /api/health` | — | status da API e do banco |
@@ -230,7 +256,7 @@ Cada recurso é um `Blueprint` do smorest, com `@blp.arguments(SchemaEntrada, lo
 Todo response com `request_id`, `definicao_versao` e `fonte` (campos comuns num schema base `MetaSchema`).
 
 ### 6.4 Performance
-- **Pré-calculado na carga:** `primeira_experiencia`, `agg_coorte_semanal`, `resultado_efeitos` (o modelo estatístico roda no ETL, não no request).
+- **Pré-calculado na carga:** `primeira_experiencia`, `agg_coorte`, `resultado_efeitos` (o modelo estatístico roda no ETL, não no request).
 - **Cache:** Flask-Caching com Redis (produção: ElastiCache), chave = endpoint + params + `versao_carga`; **expira quando há nova carga** (invalidação por versão) + TTL de segurança de 24h.
 - **Medição:** hooks `before_request`/`after_request` do Flask que geram `request_id` e logam `duracao_ms` por endpoint; meta p95 < 500 ms; em produção, CloudWatch.
 
@@ -283,13 +309,16 @@ Todo response com `request_id`, `definicao_versao` e `fonte` (campos comuns num 
 
 **Fatos:** semana 20/11/2023: dashboard 2.034 novos / 366 voltaram (18%) × relatório por `hashed_ip`: 1.172 / 352 (30%). Semanas anteriores: dashboard ~5% acima do relatório. **Retornos estáveis, denominador quase dobra** → o problema está em **quem é contado como novo**.
 
+**Checado em 11/11:** esses números não aparecem na base pública (na semana de 20/11 o Brasil tem 61 novos; o mundo, 5.355). Logo, são ilustrativos. A entrega demonstra o **mecanismo** com dados reais: user-agents distintos por IP por semana, e quanto das chaves novas pertence a um `hashed_ip` que já existia.
+
 Responder os 5 itens:
 1. **Por onde começar e por quê:** comparar o resultado do endpoint com o relatório por camada — denominador vs. numerador; confirmar que a tela só exibe o que a API devolveu (resposta do monitoramento já confirma); descer para a base analítica e a carga.
 2. **Camada da falha + evidências + consulta de confirmação.** Hipótese principal: **carga** — `usuario_id = sha256(hashed_ip | user-agent)` → mudança de user-agent (ex.: atualização de navegador) faz pessoas antigas aparecerem como novas. Confirmar: na bruta, para os "novos" da semana 20/11, quantos `hashed_ip` já existiam antes com outro user-agent; distribuição de user-agents/versões novas naquela semana. Outras hipóteses a checar e descartar com dados:
    - `ultimo_turno` (último turno) usado como "primeira vez";
    - `ON CONFLICT (conversa_id) DO NOTHING` + carga diária → conversa que continua no dia seguinte não atualiza; `turn_identifier` do 1º turno como chave;
    - possível recarga/backfill duplicado naquela semana;
-   - `date_trunc('week')` em UTC; janela "> 1 hora".
+   - `date_trunc('week')` em UTC; janela "> 1 hora";
+   - o `EXISTS` do retorno não filtra `pais`: um retorno de fora do Brasil conta como retorno.
 3. **Trecho e correção:** chave de usuário na carga (alinhada à BDR-001) + reprocessamento; corrigir também os pontos secundários encontrados.
 4. **Além do código:** reprocessar o histórico, recalcular agregados, invalidar cache, revisar outros indicadores afetados, registrar postmortem, adicionar teste de regressão + reconciliação automática + alerta de razão usuários/IP.
 5. **Comunicação com a gerente de produto:** *durante* — "o número está em investigação, indícios de que é um problema de contagem e não de comportamento; previsão de retorno X"; marcar o número como "em revisão" na tela. *Depois* — causa em linguagem simples, número corrigido, o que foi feito para não repetir.
@@ -382,13 +411,22 @@ Consequências:
 ---
 
 ## 11. Riscos e decisões em aberto (§4.3) → `docs/RISCOS.md`
+
+A lista viva está em `docs/RISCOS.md`: 11 riscos, cada um com efeito no resultado, mitigação e a quem escalar.
+
 - Definição de usuário por IP é frágil (NAT, IP dinâmico, VPN) → **decisão do cliente** sobre aceitar a margem ou implantar login/ID.
 - Efeitos são observacionais → decisão de investir em **teste A/B** antes de mudanças grandes.
 - Classificação por LLM tem erro → aceitar a acurácia medida?
 - Dados pessoais no texto → política de retenção e quem acessa a base bruta (**jurídico/cliente**).
 - Base pública ≠ produto do cliente (período 2023–2024, GPT-3.5/4) → validade externa.
-- Custo AWS: Bedrock estimado em ~US$ 25–45 no desafio e ~US$ 4–7/mês em produção (§12.1); RDS/Fargate à parte → orçamento aprovado pelo cliente e alerta de gasto.
+- Custo AWS: Bedrock em ≈ US$ 9 no desafio e ≈ US$ 4/mês em produção (§12.1); RDS e Fargate à parte → orçamento aprovado pelo cliente e alerta de gasto.
 - Escopo de outros países → priorização.
+
+**Riscos que surgiram na execução:**
+- **A conta AWS bloqueia o Bedrock** (11/11): a cota on-demand está em 0 e o batch responde "account is not authorized". Há caso aberto no AWS Support. Se nada liberar até sáb 14/11, entra a contingência por palavras-chave e regex (§12).
+- **A base pública não tem conversas tóxicas** (removidas em 2024) → o fator toxicidade não é mensurável. Um retorno tóxico desaparece, e o retorno fica subestimado.
+- **Base pequena:** 2.219 usuários, cerca de 39 por semana → IC semanal de ±15 p.p. Efeitos pequenos não aparecem.
+- **Modelo confundido com o tempo:** não há GPT-4 no Brasil de 24/06 a 07/11/2023 → compare modelos só nos períodos com os dois.
 
 ---
 
@@ -405,15 +443,15 @@ Consequências:
 ### 12.1 Classificação com Bedrock — desenho e estimativa de custo
 
 **Desenho**
-- **Modelo:** Claude Haiku 4.5 no Bedrock (barato, rápido, bom em PT-BR). No Dia 1, confirmar no console qual versão de Haiku está habilitada na região e o preço vigente na página de preços do Bedrock (o Bedrock tem vários tiers: Standard, Flex, Priority, Batch).
-- **O que classificar:** a **1ª conversa de cada usuário** (é o que a análise de retorno usa). Para a EDA de temas, se necessário, uma amostra aleatória das demais conversas.
-- **Entrada enxuta:** instrução fixa (~400 tokens: taxonomia, 3–4 exemplos, formato) + 1ª mensagem do usuário + 1ª resposta do assistente, truncadas em ~800 tokens.
-- **Saída JSON curta (~50 tokens):** `{"tema": "...", "recusa": true|false, "confianca": 0.0-1.0}`, temperatura 0.
-- **Execução:** iterar o prompt em **on-demand** numa amostra de 200; rodar a base inteira com **Batch Inference** (JSONL no S3 → resultado no S3), ~50% mais barato.
+- **Modelo:** Claude Haiku 4.5 no Bedrock, pelo inference profile `us.anthropic.claude-haiku-4-5-20251001-v1:0` (confirmado em 11/11, em `us-east-1`).
+- **O que classificar:** **todas as 11.621 conversas do Brasil** (decisão de 11/11). O custo em batch é de ≈ US$ 9. Assim a EDA de temas cobre toda a base, não só a 1ª conversa de cada usuário.
+- **Entrada enxuta:** instrução fixa (taxonomia e formato) + 1ª mensagem do usuário (até 2.000 caracteres) + 1ª resposta do assistente (até 1.500 caracteres). Medido na amostra: ≈ 1.230 tokens de entrada por conversa.
+- **Saída curta (~50 tokens):** chamada de ferramenta obrigatória (`tool_choice`), com `motivo` (até 12 palavras), `tema` (11 valores), `recusa` (`nao`, `parcial` ou `total`) e `confianca` (0 a 1). Temperatura 0.
+- **Execução:** ajuste o prompt numa amostra de 199 conversas; rode a base inteira com **Batch Inference** (JSONL no S3 → resultado no S3), 50% mais barato. O batch exige **inference profile** e **no mínimo 100 registros por job**. O ajuste do prompt também roda em batch, porque a conta não tem cota on-demand (§11).
 - **Idempotência:** chave = `conversa_id + versao_prompt + modelo`; saída em `data/enriched/temas_v{N}.parquet`, versionada no repo (o `compose up` não chama o Bedrock).
 - **Validação:** ~150 conversas rotuladas à mão, estratificadas por tema previsto → acurácia e matriz de confusão; meta ≥ 85%; no máximo 2 rodadas de ajuste de prompt/taxonomia. Comparar a recusa do LLM com o regex.
 - **Privacidade:** mandar só o trecho necessário; o texto não vai para a base analítica; declarar no ADR-007 a política de dados do Bedrock (conferir na documentação da AWS).
-- **Controle de gasto:** **AWS Budgets** com alerta em US$ 30 e US$ 60, criado antes da primeira chamada.
+- **Controle de gasto:** **AWS Budgets** mensal de US$ 20, criado antes da primeira chamada.
 
 **Premissas da estimativa**
 
@@ -427,30 +465,22 @@ Consequências:
 
 Fórmula: `custo = N × (tokens_in × preço_in + tokens_out × preço_out) × fator_batch`
 
-**Cenários (N = conversas classificadas; medir o N real no Dia 1 e atualizar)**
+**N medido em 10/11:** o Brasil tem **11.621 conversas** de **2.385 usuários** (`hashed_ip`). Os cenários do plano original (10 mil a 60 mil conversas) superestimavam o volume em até 5×.
 
-> **Atualização 10/11 (N medido):** o Brasil tem **2.385 usuários** (`hashed_ip`) e **11.621 conversas**.
-> Primeiras conversas: ≈ US$ 3,5 on-demand / US$ 1,7 batch. Todas as conversas BR: ≈ US$ 17 / US$ 8,5.
-> Os cenários abaixo superestimavam o volume em ~12×; o teto do AWS Budgets pode cair para US$ 10/20.
-
-| N | On-demand | Batch |
-|---|---|---|
-| 10.000 | US$ 14,50 | US$ 7,25 |
-| 30.000 | US$ 43,50 | US$ 21,75 |
-| 60.000 | US$ 87,00 | US$ 43,50 |
-
-**Orçamento do desafio (cenário de referência: ~30 mil primeiras conversas, batch)**
+**Orçamento do desafio (todas as conversas do Brasil, em batch)**
 
 | Item | Custo |
 |---|---|
-| Iteração do prompt (3 rodadas × 200 conversas, on-demand) | ~US$ 1 |
-| Classificação completa (batch) | ~US$ 22 |
-| 1 reprocessamento completo (se o prompt mudar após a validação) | ~US$ 22 |
-| S3 (armazenamento e requests do batch) | < US$ 1 |
-| **Total estimado** | **~US$ 25–45** |
-| Teto (alerta do AWS Budgets) | US$ 60 |
+| Ajuste do prompt (2 rodadas × 199 conversas, batch) | ≈ US$ 0,30 |
+| Classificação das 11.621 conversas (batch) | ≈ US$ 9 |
+| 1 reprocessamento completo (se o prompt mudar após a validação) | ≈ US$ 9 |
+| S3 (armazenamento e requisições do batch) | < US$ 1 |
+| **Total estimado** | **≈ US$ 10; ≈ US$ 19 com reprocessamento** |
+| Teto (AWS Budgets mensal) | US$ 20 |
 
-**Em produção (para o documento):** só as primeiras conversas novas de cada dia. Com ~1.200 novos usuários/semana (ordem de grandeza do enunciado), são ~5 mil classificações/mês ≈ **US$ 4–7/mês** em batch.
+A conta tem US$ 146,34 em créditos AWS, com validade até 19/12/2026. O custo do desafio sai desses créditos.
+
+**Em produção (para o documento):** classifique só as conversas novas de cada dia. Com ~1.200 novos usuários por semana (ordem de grandeza do enunciado), são ~5 mil classificações por mês ≈ **US$ 4/mês** em batch. Se o volume de um job ficar abaixo de 100 registros, acumule 3 dias por job ou use on-demand no incremental.
 
 **Alternativa registrada no ADR-004:** Amazon Nova Lite/Micro custa ~15–30× menos por token. Testar na mesma amostra de validação; só trocar se a acurácia ficar próxima da do Haiku.
 
@@ -460,10 +490,10 @@ Fórmula: `custo = N × (tokens_in × preço_in + tokens_out × preço_out) × f
 
 | Dia | Foco | Tarefas | Entregável | h |
 |---|---|---|---|---|
-| **Ter 10/11** | Setup + dados | Criar repo e estrutura; baixar WildChat-1M (Hugging Face `allenai/WildChat-1M`, verificar termos de acesso); filtrar Brasil para parquet com DuckDB; contagens básicas (**N de primeiras conversas → recalcular custo do Bedrock**); habilitar acesso ao Claude Haiku no Bedrock + criar alerta no AWS Budgets; iniciar `USO_DE_IA.md`; **redigir dúvidas** | Parquet BR + primeiros números | 2 |
-| **Qua 11/11** | Discovery | **Enviar dúvidas de manhã**; qualidade dos dados (§5.1); definições + tabela de sensibilidade (§4); ADR-003 (frontend) decidido | `01_discovery`, `03_definicoes`, BDRs rascunho | 3 |
-| **Qui 12/11** | Features + IA | Tabela de 1ª experiência; iterar prompt no Bedrock (on-demand, amostra de 200) → rodar Batch Inference na base; amostra rotulada à mão + métricas de validação; EDA (§5.2) | `primeira_experiencia`, validação, `02_eda` | 3 |
-| **Sex 13/11** | Análise | Logística + efeitos marginais com IC; propensity/IPW; bruto × ajustado; semana atípica (mix × taxa); 3 achados | `04_efeitos`, `05_semana`, resultados | 3 |
+| **Ter 10/11** ✅ | Setup + dados | Repo e estrutura; download da WildChat-1M com SHA-256; recorte Brasil com DuckDB; contagens iniciais (N real → custo do Bedrock); ADR-002, 004 e 010; dúvidas rascunhadas | Parquet BR + primeiros números | 2 |
+| **Qua 11/11** ✅ | Discovery | Qualidade dos dados (§5.1); `etl/definicoes.py` + 10 testes; sensibilidade (§4); BDR-001 a 008; ADR-003; IAM e classificador prontos | `01_discovery`, `03_definicoes`, ADR/BDR | 3 |
+| **Qui 12/11** | Features + EDA | Tabela `primeira_experiencia`; EDA (§5.2); classificação no Bedrock **quando a conta liberar** (§11). Se não liberar, segue sem as colunas de tema e recusa | `primeira_experiencia`, `02_eda` | 3 |
+| **Sex 13/11** | Análise | Logística + efeitos marginais com IC; propensity/IPW; bruto × ajustado; semana atípica (mix × taxa); 3 achados; validação da classificação (150 conversas à mão), se o Bedrock liberar | `04_efeitos`, `05_semana`, resultados | 3 |
 | **Sáb 14/11** | Construção | Migrations + ETL idempotente + pré-cálculos; Flask-smorest + Blueprints + schemas; 3 telas; `docker compose up` do zero | Dashboard funcionando com dados reais | 4 |
 | **Dom 15/11** | Sustentação + docs | Incidente §4.2; monitoramento/testes (§8); tela de Saúde + reconciliação ("a mais"); arquitetura + diagrama; indicadores; riscos; ADRs/BDRs finais | `docs/` completo + testes passando | 3 |
 | **Seg 16/11** | Revisão + envio | Clonar em pasta limpa e rodar `docker compose up`; revisar o `RELATORIO.md` (curto!); fechar parágrafo de IA + horas; **enviar até ~20h** | E-mail enviado | 1–2 |
@@ -478,9 +508,9 @@ Fórmula: `custo = N × (tokens_in × preço_in + tokens_out × preço_out) × f
 **Por quê:** é exatamente o mecanismo que teria evitado o incidente do desafio e é a rotina da vaga (sustentação: perceber que um número divergiu **antes** do cliente).
 
 **O que é:**
-- Job `quality_checks.py` roda após cada carga:
-  - recalcula novos e retorno 7d por semana **direto da base bruta** (caminho independente do ETL);
-  - compara com `agg_coorte_semanal` e com a resposta da API;
+- Job `etl/qualidade.py` roda após cada carga:
+  - recalcula novos e retorno em 7 dias por coorte **direto da base bruta** (caminho independente do ETL);
+  - compara com `agg_coorte` e com a resposta da API;
   - checa anomalias (novos ±3σ, razão usuários/IP, user-agents novos, linhas rejeitadas);
   - grava em `meta_reconciliacao`.
 - Tela 4 mostra: última carga, status por indicador (verde/amarelo/vermelho), diferença, linhas rejeitadas por motivo.
@@ -490,7 +520,10 @@ Fórmula: `custo = N × (tokens_in × preço_in + tokens_out × preço_out) × f
 
 ---
 
-## 15. Dúvidas para enviar (até quarta 11/11)
+## 15. Dúvidas (prazo: quarta 11/11)
+
+**O prazo venceu em 11/11.** O rascunho está em `docs/DUVIDAS.md`, com a premissa de cada item. Sem resposta, cada premissa vale e fica registrada no BDR correspondente.
+
 1. Para rodar localmente, podemos entregar a classificação por LLM pré-calculada (feita via Bedrock) no repositório, ou o `docker compose up` deve chamar o Bedrock?
 2. Há preferência de stack para o frontend ou é livre?
 3. O filtro `country = 'Brazil'` vale por conversa, ou devemos considerar o usuário brasileiro se a maioria das conversas dele for do Brasil?

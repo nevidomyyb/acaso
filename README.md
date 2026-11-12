@@ -28,6 +28,7 @@ Fonte: [allenai/WildChat-1M](https://huggingface.co/datasets/allenai/WildChat-1M
 
 | Documento | Conteúdo |
 |---|---|
+| [docs/METODOLOGIA.md](docs/METODOLOGIA.md) | Como cada número é calculado: definições, sensibilidade, IC, código e testes |
 | [docs/adr/](docs/adr/) | Decisões de arquitetura |
 | [docs/bdr/](docs/bdr/) | Decisões de negócio e definições |
 | [infra/aws/iam/](infra/aws/iam/) | Permissões AWS de menor privilégio |
