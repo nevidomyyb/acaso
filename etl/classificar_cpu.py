@@ -1,25 +1,20 @@
-"""Classificação de tema e recusa com LLM aberto em CPU numa EC2 (ADR-011; substitui o ADR-004 no desafio).
+"""Classificação de tema e recusa com LLM aberto em CPU numa EC2 (ADR-004).
 
-Motivo: a conta AWS nova não tem cota no Bedrock (nenhum modelo) nem GPU. O enunciado exige que o LLM rode
-na AWS. Então o modelo roda numa EC2 só com CPU: llama.cpp + Qwen3-4B-Instruct-2507 (GGUF Q4_K_M).
+O modelo roda numa EC2 só com CPU: llama.cpp + Qwen3 (GGUF Q4_K_M). A saída JSON é garantida pela
+gramática do llama.cpp, a partir do schema de etl/classificacao.py.
 
 Escopo: só as conversas da 1ª sessão de cada usuário (3.361), que é o que a análise de retorno usa.
 
 Subcomandos (rodam na máquina local; a EC2 é criada por infra/aws/ec2/classificacao.sh):
-  preparar  gera o JSONL com o corpo de cada requisição   -> data/work/cpu_{versao}_sessao1[_amostraN]/entrada.jsonl
+  preparar  gera o JSONL com o corpo de cada requisição   -> data/work/cpu_{versao}_{modelo}_sessao1[_amostraN]/
   enviar    copia entrada.jsonl e llm_runner.py para o S3  -> s3://$ACASO_S3_BUCKET/cpu/<pasta>/
-  coletar   baixa saida.jsonl do S3 e grava o resultado    -> data/enriched/temas_{versao}_qwen3_4b.parquet
-
-O prompt é o mesmo arquivo do Bedrock (etl/prompts/classificacao_{versao}.md). Só a linha que manda usar a
-ferramenta vira "responda com JSON"; o formato é garantido pela gramática JSON do llama.cpp (mesmo schema).
+  coletar   baixa saida.jsonl do S3 e grava o resultado    -> data/enriched/temas_{versao}_{modelo}.parquet
 """
 
 from __future__ import annotations
 
 import argparse
-import copy
 import json
-import os
 import random
 import sys
 from pathlib import Path
@@ -28,14 +23,17 @@ import duckdb
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from classify_bedrock import (  # noqa: E402
-    FERRAMENTA,
+from classificacao import (  # noqa: E402
+    NOME_SCHEMA,
+    SCHEMA,
+    bucket,
     carregar_entradas,
-    cliente,
+    cliente_s3,
     entrada_vazia,
     ler_sistema,
     linha_resultado,
     regra_vazio,
+    resumir,
     texto_entrada,
     validar,
 )
@@ -56,23 +54,6 @@ MODELOS = {
     },
 }
 MAX_TOKENS = 160
-MAX_CHARS_MOTIVO = 90  # limita a geração: em CPU, cada token de saída custa ~50 ms
-
-LINHA_FERRAMENTA = "Registre a classificação com a ferramenta `registrar_classificacao`."
-LINHA_JSON = "Responda só com um objeto JSON com os campos `motivo`, `tema`, `recusa` e `confianca`, nesta ordem."
-
-
-def sistema_json(versao: str) -> str:
-    sistema = ler_sistema(versao)
-    if LINHA_FERRAMENTA not in sistema:
-        raise SystemExit(f"prompt {versao}: linha da ferramenta não encontrada; ajuste LINHA_FERRAMENTA")
-    return sistema.replace(LINHA_FERRAMENTA, LINHA_JSON)
-
-
-def schema_json() -> dict:
-    s = copy.deepcopy(FERRAMENTA["input_schema"])
-    s["properties"]["motivo"]["maxLength"] = MAX_CHARS_MOTIVO
-    return s
 
 
 def corpo_cpu(e: dict, sistema: str, extra: dict | None = None) -> dict:
@@ -83,7 +64,7 @@ def corpo_cpu(e: dict, sistema: str, extra: dict | None = None) -> dict:
         "max_tokens": MAX_TOKENS,
         "response_format": {
             "type": "json_schema",
-            "json_schema": {"name": FERRAMENTA["name"], "schema": schema_json(), "strict": True},
+            "json_schema": {"name": NOME_SCHEMA, "schema": SCHEMA, "strict": True},
         },
         "cache_prompt": True,  # reaproveita o prompt de sistema já processado no slot
     }
@@ -113,18 +94,8 @@ def prefixo_s3(args: argparse.Namespace) -> str:
     return f"cpu/{pasta(args).name}"
 
 
-def bucket() -> str:
-    from classify_bedrock import carregar_env
-
-    carregar_env()
-    b = os.environ.get("ACASO_S3_BUCKET")
-    if not b:
-        raise SystemExit("defina ACASO_S3_BUCKET no .env")
-    return b
-
-
 def cmd_preparar(args: argparse.Namespace) -> None:
-    sistema = sistema_json(args.versao)
+    sistema = ler_sistema(args.versao)
     selecao = selecionar_sessao1(args.bruta, VOLUME, args.amostra_n, args.semente)
     p = pasta(args)
     p.mkdir(parents=True, exist_ok=True)
@@ -138,7 +109,8 @@ def cmd_preparar(args: argparse.Namespace) -> None:
 
 
 def cmd_enviar(args: argparse.Namespace) -> None:
-    s3, b, p = cliente("s3"), bucket(), pasta(args)
+    s3, b = cliente_s3(), bucket()
+    p = pasta(args)
     s3.upload_file(str(p / "entrada.jsonl"), b, f"{prefixo_s3(args)}/entrada.jsonl")
     s3.upload_file(str(RAIZ / "etl" / "llm_runner.py"), b, f"{prefixo_s3(args)}/llm_runner.py")
     print(f"s3://{b}/{prefixo_s3(args)}/ (entrada.jsonl, llm_runner.py)")
@@ -173,7 +145,7 @@ def montar(selecao: list[dict], brutos: dict[str, dict], versao: str, rotulo: st
 def cmd_coletar(args: argparse.Namespace) -> None:
     p = pasta(args)
     destino = p / "saida.jsonl"
-    cliente("s3").download_file(bucket(), f"{prefixo_s3(args)}/saida.jsonl", str(destino))
+    cliente_s3().download_file(bucket(), f"{prefixo_s3(args)}/saida.jsonl", str(destino))
     brutos: dict[str, dict] = {}
     for r in ler_jsonl(destino):
         if r["recordId"] not in brutos or not r.get("erro"):  # a última tentativa sem erro vale
@@ -186,22 +158,13 @@ def cmd_coletar(args: argparse.Namespace) -> None:
     saida.parent.mkdir(parents=True, exist_ok=True)
     df.to_parquet(saida, index=False)
     print(f"-> {saida}")
-    resumir_cpu(df)
-
-
-def resumir_cpu(df: pd.DataFrame) -> None:
-    llm = df[df.fonte == "llm"]
-    print(f"\nregistros: {len(df)} | via LLM: {len(llm)} | erros: {df.erro.notna().sum()}")
-    print(f"tokens in/out: {llm.input_tokens.sum():,.0f} / {llm.output_tokens.sum():,.0f}")
-    print(f"segundos por registro (mediana / p90): {llm.segundos.median():.1f} / {llm.segundos.quantile(0.9):.1f}")
-    print("\ntema:\n" + df.tema.value_counts(dropna=False).to_string())
-    print("\nrecusa (LLM) × recusa_regex:\n" + pd.crosstab(df.recusa, df.recusa_regex).to_string())
+    resumir(df)
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--versao", default="v1")
-    ap.add_argument("--modelo", default="qwen3_4b", choices=sorted(MODELOS))
+    ap.add_argument("--versao", default="v2")
+    ap.add_argument("--modelo", default="qwen3_8b", choices=sorted(MODELOS))
     ap.add_argument("--bruta", type=Path, default=BRUTA)
     ap.add_argument("--amostra-n", type=int, default=0, help="0 = todas da 1ª sessão; N > 0 = amostra fixa")
     ap.add_argument("--semente", type=int, default=42)

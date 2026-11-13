@@ -1,5 +1,5 @@
 #!/bin/bash
-# Boot da EC2 de classificação (ADR-011): compila o llama.cpp, baixa o modelo com SHA-256 e sobe o llama-server.
+# Boot da EC2 de classificação (ADR-004): compila o llama.cpp, baixa o modelo com SHA-256 e sobe o llama-server.
 set -euxo pipefail
 exec > /var/log/acaso-setup.log 2>&1
 

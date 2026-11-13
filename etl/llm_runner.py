@@ -1,4 +1,4 @@
-"""Executor da classificação em CPU (ADR-011). Roda NA EC2, ao lado do llama-server.
+"""Executor da classificação em CPU (ADR-004). Roda NA EC2, ao lado do llama-server.
 
 Lê o JSONL de entrada ({recordId, body}), envia cada `body` ao endpoint OpenAI-compatível do llama.cpp e grava
 uma linha por registro em `saida.jsonl` ({recordId, conteudo, uso, segundos, erro}). É retomável: registros já

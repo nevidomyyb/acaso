@@ -3,7 +3,7 @@
 **Status:** aceito · 2026-11-12
 
 ## Contexto
-Uma recusa na estreia pode afastar a pessoa. O LLM marca a recusa em 3 níveis (`nao`, `parcial`, `total`), e um regex PT/EN roda junto como checagem (ADR-011). Na validação manual de 151 conversas, a pessoa marca 16 recusas: 5 totais e 11 parciais. Os dois detectores quase nunca acham a recusa parcial.
+Uma recusa na estreia pode afastar a pessoa. O LLM marca a recusa em 3 níveis (`nao`, `parcial`, `total`), e um regex PT/EN roda junto como checagem (ADR-004). Na validação manual de 151 conversas, a pessoa marca 16 recusas: 5 totais e 11 parciais. Os dois detectores quase nunca acham a recusa parcial.
 
 ## Opções
 | Opção | Marcadas que são recusa | Totais achadas | Usuários com recusa | Retorno 7d com × sem (bruto) |

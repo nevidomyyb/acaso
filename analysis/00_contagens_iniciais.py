@@ -6,7 +6,7 @@ Uso:
 Responde:
   - quantas conversas/usuários/semanas o Brasil tem e em que período;
   - qualidade básica (turnos de usuário sem timestamp, entradas vazias, hash repetido);
-  - N de primeiras conversas → recálculo do custo do Bedrock (PROJECT.md §12.1);
+  - N de primeiras conversas → recálculo do custo da classificação (PROJECT.md §12.1);
   - se conseguimos reproduzir o relatório do incidente (semana 20/11/2023: 1.172 novos / 352 voltaram
     por hashed_ip; dashboard: 2.034 / 366 com usuário = hashed_ip + user-agent).
 """
@@ -17,8 +17,8 @@ import argparse
 
 import duckdb
 
-PRECO_IN, PRECO_OUT = 1.00 / 1e6, 5.00 / 1e6  # Haiku 4.5 on-demand (premissa §12.1, conferir no console)
-TOK_IN, TOK_OUT, FATOR_BATCH = 1200, 50, 0.5
+PRECO_HORA = 0.714  # c7i.4xlarge on-demand em us-east-1 (premissa §12.1)
+SEG_POR_CONVERSA = 6.2  # medido em 12/11 com 4 slots paralelos (ADR-004)
 
 
 def main() -> None:
@@ -97,11 +97,11 @@ def main() -> None:
         SELECT date_trunc('week', t0)::DATE semana, count(*) novos FROM f GROUP BY 1 ORDER BY 1""",
     )
 
-    # Custo do Bedrock com N = nº de primeiras conversas (1 por usuário)
+    # Custo da classificação na EC2 com N = nº de primeiras conversas (1 por usuário)
     n_users = con.execute("SELECT count(DISTINCT hashed_ip) FROM br").fetchone()[0]
-    custo = n_users * (TOK_IN * PRECO_IN + TOK_OUT * PRECO_OUT)
-    print(f"\n## Custo Bedrock (N = {n_users} primeiras conversas por hashed_ip)")
-    print(f"on-demand ≈ US$ {custo:.2f} · batch ≈ US$ {custo * FATOR_BATCH:.2f}")
+    horas = n_users * SEG_POR_CONVERSA / 3600
+    print(f"\n## Custo da classificação (N = {n_users} primeiras conversas por hashed_ip)")
+    print(f"{horas:.1f} h de c7i.4xlarge ≈ US$ {horas * PRECO_HORA:.2f}")
 
     # Reprodução do incidente: variantes de definição para a semana de 20/11/2023
     print("\n## Reprodução do incidente — semana de 2023-11-20 (alvo relatório: 1.172 / 352; dashboard: 2.034 / 366)")

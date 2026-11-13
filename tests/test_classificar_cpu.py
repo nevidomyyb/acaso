@@ -1,4 +1,4 @@
-"""Classificação em CPU (ADR-011): seleção da 1ª sessão, prompt, schema e leitura da saída do llama-server."""
+"""Classificação em CPU (ADR-004): seleção da 1ª sessão, prompt, schema e leitura da saída do llama-server."""
 
 from __future__ import annotations
 
@@ -6,15 +6,13 @@ import json
 from datetime import timedelta
 
 import duckdb
+from classificacao import SCHEMA, TEMAS, ler_sistema
 from classificar_cpu import (
-    LINHA_FERRAMENTA,
     MODELOS,
     corpo_cpu,
     ids_primeira_sessao,
     interpretar_cpu,
     montar,
-    schema_json,
-    sistema_json,
 )
 
 M = lambda m: timedelta(minutes=m)  # noqa: E731
@@ -33,16 +31,16 @@ def test_seleciona_so_conversas_da_primeira_sessao(base):
     assert ids == {primeiros[0], primeiros[1], primeiros[3]}
 
 
-def test_prompt_troca_so_a_linha_da_ferramenta():
-    s = sistema_json("v1")
-    assert LINHA_FERRAMENTA not in s and "objeto JSON" in s
-    assert "saudacao_teste" in s and "recusa" in s
+def test_prompt_pede_json_e_traz_a_taxonomia_inteira():
+    s = ler_sistema("v2")
+    assert "objeto JSON" in s  # o llama-server não tem chamada de ferramenta
+    assert all(t in s for t in TEMAS) and all(f"`{r}`" in s for r in ("nao", "parcial", "total"))
 
 
 def test_corpo_forca_schema_e_limita_motivo():
     corpo = corpo_cpu({"msg_usuario": "oi", "msg_assistente": "olá"}, "sistema")
     schema = corpo["response_format"]["json_schema"]["schema"]
-    assert schema == schema_json() and schema["properties"]["motivo"]["maxLength"] > 0
+    assert schema == SCHEMA and schema["properties"]["motivo"]["maxLength"] > 0
     assert corpo["temperature"] == 0 and corpo["messages"][0]["role"] == "system"
 
 

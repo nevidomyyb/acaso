@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# EC2 de classificação em CPU (ADR-011). Usa o perfil padrão do AWS CLI (administrador), nunca o .env.
+# EC2 de classificação em CPU (ADR-004). Usa o perfil padrão do AWS CLI (administrador), nunca o .env.
 #
 #   classificacao.sh criar              role + instance profile + security group + instância
 #   classificacao.sh pronto             mostra se o llama-server subiu (fim do user-data)

@@ -28,7 +28,7 @@ Use em **todo documento** do projeto (ADR, BDR, README, docs/, relatório, e-mai
 2. A carga popula a base analítica **a partir da base bruta**. O dashboard **nunca lê a bruta**.
 3. ≥ 2 telas com **dados reais**.
 4. Só `country = 'Brazil'` (BDR-007, aceito).
-5. Infra e custo na **AWS** (LLM = **Amazon Bedrock**). A entrega roda local; a implantação fica descrita.
+5. Infra e custo na **AWS**, inclusive o LLM. A entrega roda local; a implantação fica descrita.
 6. A base analítica **não** tem texto das conversas, `hashed_ip`, user-agent completo nem identificador exibível. k-anonimato (k=20) nos recortes.
 7. Toda premissa registrada **+ o que muda se estiver errada**. ADRs em `docs/adr/`, BDRs em `docs/bdr/` (índices em `README.md` de cada pasta).
 8. Parágrafo final de uso de IA: ferramentas, o que foi conferido/corrigido/descartado e **horas**.
@@ -37,9 +37,9 @@ Use em **todo documento** do projeto (ADR, BDR, README, docs/, relatório, e-mai
 | Item | Decisão | Status |
 |---|---|---|
 | ADR-002 backend | Flask + flask-smorest, gunicorn, Swagger em `/docs` | aceito |
-| ADR-004 classificação | Bedrock Haiku 4.5 em batch. **Substituído no desafio pelo ADR-011** (conta sem cota); continua o alvo em produção | substituído (12/11) |
-| ADR-011 classificação | **LLM aberto em CPU numa EC2**: **Qwen3-8B Q4_K_M** (sem thinking) + llama.cpp v0.9.0, c7i.4xlarge, acesso só por SSM, autodestruição por `shutdown`. **Prompt v2**, mesmo schema. Escopo: **só a 1ª sessão** (3.361 conversas; 43 vazias por regra). Saída: `data/enriched/temas_v2_qwen3_8b.parquet`; o compose não chama LLM. Ajuste fechado (2 rodadas) | aceito (12/11) |
-| ADR-010 motor ETL | DuckDB (dbt adiado) | aceito |
+| ADR-004 classificação | **LLM aberto em CPU numa EC2**: **Qwen3-8B Q4_K_M** (sem thinking) + llama.cpp v0.9.0, c7i.4xlarge, acesso só por SSM, autodestruição por `shutdown`. **Prompt v2**, saída JSON por gramática. Escopo: **só a 1ª sessão** (3.361 conversas; 43 vazias por regra). Saída: `data/enriched/temas_v2_qwen3_8b.parquet`; o compose não chama LLM. Bedrock descartado (cota 0). Ajuste fechado (2 rodadas) | aceito (12/11) |
+| ADR-010 motor ETL | DuckDB (dbt adiado). Em produção, o mesmo job roda no Glue Python Shell | aceito |
+| ADR-006 arquitetura | **6 serviços AWS:** S3 → **Glue Python Shell** (carga agendada) → RDS PostgreSQL → ECS Fargate (API + dashboard) atrás de ALB · CloudWatch Logs · SSM Parameter Store. ≈ US$ 70/mês. **Glue Python Shell, não Spark** (base de 22 MB). Fora: Step Functions, EventBridge, ElastiCache, CloudFront, Secrets Manager | aceito (13/11) |
 | BDR-007 filtro | Só `country = 'Brazil'`. Alternativa rejeitada: `OR language = 'Portuguese'` (traria Portugal, Moçambique etc. e foge da restrição) | aceito |
 | ADR-003 frontend | **Streamlit com tema próprio** (`.streamlit/config.toml` + CSS), lendo **só a API**; gráficos em Altair com a paleta da análise; ECS Fargate na AWS | aceito (11/11) |
 | BDR-001 usuário | `hashed_ip` (IP+UA dá +2,2 p.p.; IP compartilhado −0,1 p.p.) | aceito |
@@ -52,6 +52,7 @@ Use em **todo documento** do projeto (ADR, BDR, README, docs/, relatório, e-mai
 | BDR-009 tema | **7 grupos** (`GRUPO_TEMA` em `definicoes.py`), tema da **1ª conversa da 1ª sessão**; 11 temas só nos gráficos descritivos | aceito (12/11) |
 | BDR-010 recusa | fator = recusa **`total` pelo LLM na 1ª conversa** (`RECUSA_FATOR`); regex e sessão inteira = sensibilidade; parcial fora | aceito (12/11) |
 | Visão do dashboard | coorte **mensal** principal; semanal como detalhe; esmaecer se IC > ±10 p.p. (~80 pessoas) | decidido 11/11 |
+| Escopo da entrega | **2 telas** (visão geral; o que faz voltar, com 2º bloco por tema e modelo), **4 endpoints** (`kpis`, `retencao/coortes` com `dimensao`, `fatores/efeitos`, `health`), **sem cache externo** (tabelas prontas da carga). Cortes e motivos em PROJECT.md §14 | decidido 13/11 |
 
 ## Convenções
 - Idioma: documentação, nomes de domínio (tabelas/colunas) e comentários em **português**.
@@ -63,13 +64,15 @@ Use em **todo documento** do projeto (ADR, BDR, README, docs/, relatório, e-mai
 - Volume diário global: `data/raw/wildchat_volume_diario.parquet` (gerado pelo recorte) → detecta falha de coleta.
 - Testes: `.venv/bin/python -m pytest -q` (base sintética em `tests/conftest.py`). Lint: `.venv/bin/ruff check analysis etl tests`.
 - **Notebooks:** fonte = `analysis/NN_*.py` (jupytext, formato percent); gerar/executar com `cd analysis && ../.venv/bin/jupytext --to ipynb --execute NN_x.py`. Estilo dos gráficos em `analysis/estilo.py` (paleta da skill dataviz; rodapé com fonte via `nota()`). Sempre olhar os PNGs gerados antes de concluir.
-- Classificação (ADR-011): `etl/classificar_cpu.py [--amostra-n N] {preparar|enviar|coletar}` (local) + `etl/llm_runner.py` (roda na EC2, só stdlib, retomável) + `infra/aws/ec2/classificacao.sh {criar|pronto|rodar|log|exec|destruir}` (perfil admin do CLI). Reaproveita de `etl/classify_bedrock.py`: `texto_entrada`, `validar`, `linha_resultado(modelo=...)`, `regra_vazio`. Prompt em `etl/prompts/classificacao_v1.md` (a linha da ferramenta vira "responda JSON"); regex de recusa em `etl/recusa_regex.py`.
+- Classificação (ADR-004): `etl/classificacao.py` = base (taxonomia `TEMAS`/`RECUSAS`, `SCHEMA`, `texto_entrada`, `validar`, `linha_resultado`, `regra_vazio`, `cliente_s3`). `etl/classificar_cpu.py {preparar|enviar|coletar}` (local, padrão `--versao v2 --modelo qwen3_8b`) + `etl/llm_runner.py` (roda na EC2, só stdlib, retomável) + `infra/aws/ec2/classificacao.sh {criar|pronto|rodar|log|exec|destruir}` (perfil admin do CLI). Prompt em `etl/prompts/classificacao_v2.md`; regex de recusa em `etl/recusa_regex.py`.
 - Enunciado original: PDF em `docs/` e texto em `docs/desafio/enunciado.txt` (grep-ável). A janela de 7 dias é **exigência do enunciado** (linha 35), não escolha nossa ⇒ `janela_retorno_dias` não tem variante na sensibilidade.
+- **`docs/ARQUITETURA.md`** tem o desenho dos 6 serviços AWS, local × produção, custo e o que ficou de fora (ADR-006).
+- **`docs/METODOLOGIA_LABEL.md`** documenta a rotulagem (tema e recusa): desenho, 5 camadas de validação da saída, validação manual e limites.
 - **`docs/METODOLOGIA.md`** explica a origem de cada número: ADR × BDR, sensibilidade, IC, cada query de `definicoes.py`, cada notebook e cada teste. Atualize junto com os números. O §10 tem o resumo das definições para a apresentação.
 - Início da conversa = timestamp da **1ª resposta do assistente** (`list_min` dos timestamps dos turnos), nunca o `timestamp` de topo.
 - Máquina: 15 GB RAM (≈ 6 GB livres), 12 núcleos. DuckDB com `memory_limit` explícito e `SET TimeZone='UTC'`.
-- **Segredos:** `.env` (gitignored, `chmod 600`) tem `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION` (preenchidos em 11/11) e `ACASO_S3_BUCKET`, `ACASO_BEDROCK_ROLE_ARN` (preenchidos em 11/11). Modelo em `.env.example`. No compose, use `env_file: [{path: .env, required: false}]` para subir sem o arquivo. Nunca leia nem imprima os valores do `.env` (para checar, mascare: `awk -F= ...`).
-- **AWS:** políticas IAM de menor privilégio em `infra/aws/iam/` (usuário `acaso-etl` + role `AmazonBedrock-acaso-batch`; bucket `acaso-desafio-tecnico`). Não crie recursos AWS (Budgets, S3, jobs) sem confirmação explícita da pessoa.
+- **Segredos:** `.env` (gitignored, `chmod 600`) tem `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION` (preenchidos em 11/11) e `ACASO_S3_BUCKET` (preenchidos em 11/11). O `ACASO_BEDROCK_ROLE_ARN` ficou no arquivo, sem uso. Modelo em `.env.example`. No compose, use `env_file: [{path: .env, required: false}]` para subir sem o arquivo. Nunca leia nem imprima os valores do `.env` (para checar, mascare: `awk -F= ...`).
+- **AWS:** políticas IAM de menor privilégio em `infra/aws/iam/` (usuário `acaso-etl`, só S3; bucket `acaso-desafio-tecnico`) e em `infra/aws/ec2/` (role da instância: SSM + prefixo `cpu/*` do bucket). Não crie recursos AWS (Budgets, S3, EC2) sem confirmação explícita da pessoa.
 - Commits só quando a pessoa pedir; branch a partir de `main`.
 
 ## Fatos dos dados (manter atualizado)
@@ -113,29 +116,18 @@ Use em **todo documento** do projeto (ADR, BDR, README, docs/, relatório, e-mai
 - Leitura: novos quase dobram e retornos ficam estáveis ⇒ ~860 "novos" que **não voltam** ⇒ chaves novas para pessoas antigas que não se repetem (ex.: user-agent que passa a variar por conversa, ou UA nulo/alterado). Confirmar com: UAs distintos por IP por semana; % das chaves novas cujo `hashed_ip` já existia.
 - Os números não aparecem nos dados públicos (BR 20/11: 61 novos no padrão; global 5.355) ⇒ são ilustrativos; demonstrar o **mecanismo** com dados reais.
 
-**Bedrock (verificado em 11/11 na documentação AWS e por consulta somente leitura)**
-- Haiku 4.5 e Haiku 5.5 ativos em us-east-1. O batch do Haiku 4.5 só aceita **inference profile** (`us.` → us-east-1, us-east-2, us-west-2).
-- **Mínimo de 100 registros por job** de batch. Em produção (~41 novos/semana) não passa: acumule 3 semanas ou use on-demand no incremental.
-- **Bloqueio em 11/11:** `InvokeModel` → `ResourceNotFoundException: Model use case details have not been submitted`. A conta precisa enviar o formulário de caso de uso da Anthropic (console do Bedrock, conta admin).
-- Custo: todas as 11.621 conversas BR ≈ US$ 9 em batch (decisão de 11/11: classificar **todas**).
-- **Cotas on-demand zeradas (11/11):** depois do formulário, o playground deu `ThrottlingException: Too many tokens per day`. Service Quotas mostra **0** em RPM/TPM de todos os modelos (Haiku 4.5, Haiku 5.5, Sonnet 4.6, Nova), contra o padrão AWS de 10.000 RPM / 5M TPM no Haiku 4.5 ⇒ restrição de conta nova; trocar de modelo não resolve. Cotas de **batch** não estão zeradas (100k registros/job, 100 jobs). Códigos: `L-CCA5DF70` (RPM cross-region Haiku 4.5), `L-58BE175A` (TPM cross-region Haiku 4.5). Cotas "tokens per day" não são ajustáveis pelo Service Quotas ⇒ caso no AWS Support.
-- Ajuste de prompt **via batch**: `classify_bedrock.py --amostra-n 200 {preparar-batch|enviar-batch|status|coletar}` (199 registros, ≈ 245k tokens, ≈ US$ 0,15) → `data/enriched/amostra_v1.parquet`. Entrada já preparada em `data/work/batch_v1_amostra200/`.
-- **Causa provável (11/11):** conta no **plano FREE** (`aws freetier get-account-plan-state`): US$ 146,34 de créditos, expira em 19/12/2026. O plano gratuito exclui ofertas do Marketplace que consomem créditos (Claude no Bedrock é Marketplace). Decisão da pessoa: **migrar para o plano pago** (créditos continuam; classificação ≈ US$ 9 sai dos créditos). Depois: rechecar cotas; se seguirem em 0, caso no AWS Support. Alternativas avaliadas e descartadas por prazo/qualidade: EC2 ou SageMaker com modelo aberto; Comprehend (não cobre a taxonomia nem recusa).
-- **Plano pago (11/11, tarde):** conta migrada para **PAID** (créditos mantidos, US$ 146,34). Modelo `AUTHORIZED`/`AVAILABLE`, mas o on-demand segue com `Too many tokens per day` e as cotas RPM/TPM seguem em 0. Os 2 pedidos de aumento da manhã (antes da migração) fecharam (`CASE_CLOSED`) sem aumento. **Novos pedidos enviados às 22h58** (10.000 RPM e 5M TPM): `CASE_OPENED`, sem resposta até 12/11 de manhã.
-- **Batch também bloqueado (11/11):** `CreateModelInvocationJob` → `ValidationException: Your account is not authorized to perform this action. Please create a support case`. Restrição da conta, não do IAM nem da cota. Só o AWS Support libera. O upload da entrada no S3 funcionou.
-- **Recursos criados pela pessoa (11/11):** bucket `acaso-desafio-tecnico` (us-east-1, acesso público bloqueado) e role **`AmazonBedrock-acaso-batch`** (nome com `AmazonBedrock` porque a política gerenciada só permite `iam:PassRole` para esse padrão). Corrigi um `<BUCKET>` não trocado na política inline da role. `.env` preenchido.
-- **IAM real ≠ documentado:** o `acaso-etl` usa `AmazonS3FullAccess` + `AmazonBedrockFullAccess` (gerenciadas) na conta de desenvolvimento. A política inline de `infra/aws/iam/` é o alvo de menor privilégio.
-- Pedido de aumento de cota: o Service Quotas recusa valor abaixo do padrão AWS (`IllegalArgumentException`). Mínimo = 10.000 RPM (`L-CCA5DF70`) e 5.000.000 TPM (`L-58BE175A`).
-- Consultas de plano e cotas: use o perfil padrão do AWS CLI (administrador), sem carregar o `.env`. O `acaso-etl` não tem `freetier:*` nem `servicequotas:*`.
-- **Resposta do AWS Support (12/11):** conta nova com pouco histórico de uso e gasto ⇒ Haiku 4.5, Sonnet, Opus, GPT etc. ficam restritos por "alguns ciclos de faturamento"; liberação automática; urgência → time de vendas da AWS. Ou seja: **não libera antes da entrega**.
-- **Teste de 12/11 (Converse, 5 tokens):** **todos** os modelos do Bedrock falham com `Too many tokens per day`: Nova Micro/Lite/2 Lite, Qwen3 32B, gpt-oss-120b, Gemma 3 27B, Llama 3.3 70B, Ministral 3 8B, DeepSeek V3.2. Cotas on-demand de todos = 0. O Bedrock está fora para o desafio.
-- **Capacidade AWS da conta (12/11):** GPU = **0** em tudo (EC2 G/VT on-demand e spot; SageMaker endpoint/processing/transform/notebook em g4dn, g5, g6, g6e; padrão AWS também 0, ajustável). CPU: EC2 16 vCPU on-demand e 32 vCPU spot; SageMaker endpoint CPU (30× ml.c7i.2xlarge, 16× ml.m5.xlarge), 1 notebook por tipo; transform/processing CPU = 0.
-- Enunciado §2.2 (linha 112): o LLM, se usado, **tem de rodar na AWS**. Na análise vale qualquer ferramenta. ⇒ LLM local está fora; palavras-chave + regex (sem LLM) pode rodar em qualquer lugar.
-- Free tier do EC2 (t3.micro, 1 GB) não roda LLM. Qualquer alternativa sai dos **créditos** (US$ 146,34).
-- Contingência (se a EC2 também falhar): classificador por palavras-chave + `recusa_regex` (PROJECT.md §12).
-- Pedido de GPU (12/11): EC2 `L-DB2E81BA` (G e VT on-demand) = 4 vCPU, `CASE_OPENED`. Se aprovar, g6.xlarge roda 8B em minutos; não é mais necessário para o desafio.
+**Bedrock avaliado e descartado (11–12/11; opção A do ADR-004)**
+- Cota on-demand **0 em todos os modelos**, com chamada real (Converse, 5 tokens): Haiku 4.5/5.5, Sonnet 4.6, Nova Micro/Lite/2 Lite, Qwen3 32B, gpt-oss-120b, Gemma 3 27B, Llama 3.3 70B, Ministral 3 8B, DeepSeek V3.2 ⇒ `ThrottlingException: Too many tokens per day`. Trocar de modelo não resolve.
+- Batch: `CreateModelInvocationJob` → `ValidationException: Your account is not authorized`. É restrição da conta, não do IAM nem da cota. O upload da entrada no S3 funcionou.
+- **Resposta do AWS Support (12/11):** conta nova com pouco histórico de uso e gasto ⇒ restrita por "alguns ciclos de faturamento", com liberação automática ⇒ **não libera antes da entrega**. Os casos de cota seguem abertos (`L-CCA5DF70` 10.000 RPM, `L-58BE175A` 5M TPM); o Service Quotas recusa valor abaixo do padrão AWS.
+- Conta migrada de FREE para **PAID** em 11/11. Créditos mantidos: US$ 146,34, expiram em 19/12/2026. O custo do desafio sai deles. Consultas de plano e cota: perfil padrão do AWS CLI (administrador), sem carregar o `.env`.
+- **Capacidade da conta (12/11):** GPU = **0** em tudo (EC2 G/VT on-demand e spot; SageMaker em g4dn, g5, g6, g6e; o padrão AWS também é 0). CPU: EC2 16 vCPU on-demand e 32 vCPU spot. Pedido de GPU `L-DB2E81BA` = 4 vCPU, `CASE_OPENED`; já não é necessário.
+- Enunciado §2.2 (linha 112): o LLM, se usado, **tem de rodar na AWS**. O texto **não nomeia o Bedrock** (conferido em 13/11): "LLM = Bedrock" era glosa nossa. Na análise vale qualquer ferramenta ⇒ LLM local está fora; palavras-chave + regex (sem LLM) pode rodar em qualquer lugar.
+- **Recursos que continuam na conta:** bucket `acaso-desafio-tecnico` (us-east-1, acesso público bloqueado) — usado pela EC2 — e role `AmazonBedrock-acaso-batch`, sem uso. O `.env` ainda tem `ACASO_BEDROCK_ROLE_ARN`, sem uso.
+- IAM real ≠ documentado: o `acaso-etl` usa `AmazonS3FullAccess` + `AmazonBedrockFullAccess` (gerenciadas) na conta de desenvolvimento. A política inline de `infra/aws/iam/` é o alvo de menor privilégio, agora só com S3.
+- Contingência (se a EC2 falhar): classificador por palavras-chave + `recusa_regex` (PROJECT.md §12).
 
-**Classificação em CPU (12/11, ADR-011)**
+**Classificação em CPU (12/11, ADR-004)**
 - EC2 `i-078e9e3579173f86c` (c7i.4xlarge, us-east-1a). 1º boot falhou: `snap install aws-cli` sem acesso à snap store ⇒ AWS CLI pelo zip oficial; `classificacao.sh setup` reaplica.
 - Ritmo (4 slots paralelos): Qwen3-4B 4,0 s/conversa; Qwen3-8B 6,5 s/conversa (latência mediana 15 s e 23 s).
 - Ajuste em 40 conversas da 1ª sessão (semente 42), contra a referência do Claude em `data/work/ajuste_referencia_claude.json` (temas ambíguos aceitam mais de 1 valor): 4B v1 = 36/40 tema e 38/40 recusa; 4B v2 = 35 e 37; **8B v2 = 35 e 39** (1 recusa falsa em 3). Erros do 4B: pergunta técnica → `conhecimento_geral`; texto novo → `traducao_reescrita`; ressalva "como IA…" → `parcial`. `confianca` ≈ 0,95 constante: inútil.
@@ -151,22 +143,32 @@ Use em **todo documento** do projeto (ADR, BDR, README, docs/, relatório, e-mai
   - Tema em 7 grupos (conhecimento+estudo+trabalho = `tarefa_conhecimento`; criativo+roleplay+adulto = `criativo_entretenimento`): bruta 77,5%, **ponderada 83,8% (IC 78,9–88,7%)**. Grupos escolhidos depois de ver a matriz ⇒ leve otimismo.
   - Recusa: humano marcou 16 (5 total + 11 parcial). LLM `total`: precisão 8/9, recall 8/16, pega 5/5 das totais. Regex: precisão 8/9, recall 8/16, pega 4/5. LLM parcial+total: 9/13 e 9/16. "Parcial" humana quase nunca é detectada (7 de 11 → `nao`).
 
+**Arquitetura e escopo (13/11, ADR-006 e PROJECT.md §14)**
+- **Glue:** o tipo **Python Shell** é um processo Python agendado e gerenciado (0,0625 DPU ≈ 1 GB, cobrado por segundo); o tipo **Spark** é cluster. Para 22 MB, Spark é desproporcional ⇒ Python Shell. Duas frições a tratar: o runtime do Python Shell fica atrás do Python 3.13 local (bibliotecas extras por `--additional-python-modules`), e gravar num RDS em subnet privada exige uma **Glue Connection** com VPC, subnet e SG.
+- **Custo da arquitetura:** ≈ **US$ 70/mês** (Fargate ~36 + ALB ~17 + RDS ~14 + resto ~4). Fargate e ALB = 76% do total ⇒ desligar a tarefa fora do horário comercial corta quase metade. Os preços unitários são **premissa**, não cotação conferida; refazer no Pricing Calculator antes de citar.
+- **Equivalência conferida (12/11):** o `etl/prompts/classificacao_v2.md` em disco é idêntico, caractere a caractere, à mensagem de sistema do `entrada.jsonl` da rodada real, e o `SCHEMA` também. Só o rótulo do schema mudou de nome (metadado; o llama.cpp monta a gramática a partir do campo `schema`). Comando da conferência no §11 do `METODOLOGIA_LABEL.md`.
+- **Dependências declaradas e ainda sem uso:** `statsmodels`, `scikit-learn` e `user-agents` estão no `requirements-analysis.txt` e nenhum arquivo as importa. As duas primeiras entram no notebook 04 (logística e IPW). A `user-agents` pode sair: o discovery separou dispositivo por SQL.
+
 ## Status
 - **10/11 (Dia 1):** repo estruturado; `.venv`; bruta baixada e verificada; recorte Brasil; contagens iniciais; ADR-002/004/010; dúvidas rascunhadas.
 - **11/11 (Dia 2, madrugada):** `.env` + IAM em `infra/aws/iam/`; padrão ASD-STE100; ADRs enxutos; BDR-007.
-- **11/11 (Dia 2):** enunciado lido e extraído; classificador pronto (`etl/classify_bedrock.py`, prompt v1, regex de recusa) e testado até a chamada (bloqueado pelo formulário da Anthropic); `etl/definicoes.py` + `etl/estatistica.py` + 10 testes passando; notebooks `01_discovery` e `03_definicoes_sensibilidade` executados; BDR-001 a 006 e 008 escritos; ADR-003 proposto; `docs/RISCOS.md` iniciado. Nada commitado.
+- **11/11 (Dia 2):** enunciado lido e extraído; classificador pronto (prompt v1, regex de recusa) e testado até a chamada no Bedrock (barrado pela conta); `etl/definicoes.py` + `etl/estatistica.py` + 10 testes passando; notebooks `01_discovery` e `03_definicoes_sensibilidade` executados; BDR-001 a 006 e 008 escritos; ADR-003 proposto; `docs/RISCOS.md` iniciado. Nada commitado.
 - **12/11 (Dia 3, manhã):** AWS — plano migrado para pago e verificado; bucket + role criados; `.env` completo; batch barrado pela conta (caso no Support). PROJECT.md auditado contra o repo: 12 trechos vencidos corrigidos (estrutura §3.2 com os arquivos reais e a descrição de cada um; §4 trazia a escolha antiga de BDR-002/003/006; custo do Bedrock US$ 25–45 → ≈ US$ 9; coorte mensal, estado agrupado, sem `toxic`; 4 riscos novos; cronograma; 2 tabelas quebradas). Escrito `docs/METODOLOGIA.md`: origem de cada número, ADR × BDR, sensibilidade, IC de Wilson, cada query, notebook e teste. Funil e 2 números reconferidos. Notas da apresentação revisadas (§10 do METODOLOGIA). Commits `6e763d8` (dia 2) e `03977d5` (docs).
-- **12/11 (Dia 3, tarde):** Support confirmou que o Bedrock não libera a tempo; teste mostrou 0 de cota em todos os modelos e 0 de GPU. Decisão (pessoa): LLM aberto em CPU numa EC2, escopo só 1ª sessão; pedido de GPU em paralelo. Feito: ADR-011; `etl/classificar_cpu.py`, `etl/llm_runner.py`, `etl/validacao_classificacao.py`; `infra/aws/ec2/`; prompt v2; regex corrigido; 28 testes. Ajuste em 2 rodadas → Qwen3-8B + v2; rodada completa concluída (0 erros) → `data/enriched/temas_v2_qwen3_8b.parquet`; EC2 destruída; amostra de validação gerada.
+- **12/11 (Dia 3, tarde):** Support confirmou que o Bedrock não libera a tempo; teste mostrou 0 de cota em todos os modelos e 0 de GPU. Decisão (pessoa): LLM aberto em CPU numa EC2, escopo só 1ª sessão; pedido de GPU em paralelo. Feito: ADR-004 reescrito; `etl/classificar_cpu.py`, `etl/llm_runner.py`, `etl/validacao_classificacao.py`; `infra/aws/ec2/`; prompt v2; regex corrigido; 28 testes. Ajuste em 2 rodadas → Qwen3-8B + v2; rodada completa concluída (0 erros) → `data/enriched/temas_v2_qwen3_8b.parquet`; EC2 destruída; amostra de validação gerada.
+- **12/11 (Dia 3, noite):** simplificação. O Bedrock saiu do código e dos documentos: `etl/classify_bedrock.py` virou `etl/classificacao.py` (base compartilhada) + caminho único da EC2; a indireção do prompt ("linha da ferramenta") saiu, e o prompt v2 em disco é agora idêntico ao que foi enviado ao modelo; o ADR-004 foi reescrito como a decisão original, com o Bedrock como opção descartada, e o ADR-011 deixou de existir. Políticas IAM de batch apagadas (a role segue na conta, sem uso); `usuario-acaso-etl.json` caiu de 5 blocos para 2, só S3; `ACASO_BEDROCK_ROLE_ARN` saiu do `.env.example`. O `boto3` fica: o S3 é o canal da EC2. `docs/METODOLOGIA_LABEL.md` documenta a etapa de rotulagem e lista a mudança arquivo por arquivo. **Conferido:** prompt e schema idênticos aos da rodada real, validação reavaliada com os mesmos números (71,4% e 83,8%), `preparar` de ponta a ponta, 29 testes e `ruff` limpo. Nada commitado.
+- **13/11 (Dia 4):** escopo reduzido (PROJECT.md §14): fora a tela de Saúde e a reconciliação automática, a tela 3, o cache em Redis, 2 endpoints, `INDICADORES.md`, `MONITORAMENTO.md` e 3 ADRs (~8 h). Ficam 2 telas e 4 endpoints. Escritos `docs/ARQUITETURA.md` (diagrama, 6 serviços, local × produção, custo ≈ US$ 70/mês, o que ficou de fora) e o **ADR-006**; o ADR-010 foi alinhado (em produção, DuckDB roda no Glue Python Shell); os indicadores viraram o **§11 do METODOLOGIA**; o índice de ADRs diz onde cada decisão cortada ficou. Cronograma refeito: 13/11 análise, 14/11 construção, 15/11 incidente e docs, 16/11 revisão e envio.
 
 ## Pendências que dependem da pessoa
 - Bedrock: os casos de cota seguem abertos; nada a fazer para o desafio.
 - Preencher as horas de cada dia em `docs/USO_DE_IA.md` (hoje `_preencher_`). O desafio pede o total.
 - Dúvidas: prazo venceu em 11/11 e não foram enviadas. As premissas de `docs/DUVIDAS.md` valem e estão nos BDRs. Decida se envia mesmo atrasado.
 - Commitar o recorte Brasil: `data/raw/wildchat_br.parquet` (+ `.manifest.json`) e `wildchat_volume_diario.parquet` estão fora do git (untracked). A carga do compose depende deles (regra 1).
+- Decidir se a `user-agents` sai do `requirements-analysis.txt` ou entra na `primeira_experiencia.py` (hoje é dependência sem uso).
+- ADR-001 (Postgres) e ADR-007 (privacidade) ficaram para 15/11, de meia página cada. Se o tempo apertar, viram seção do `RELATORIO.md`.
 - Pronto, sem ação: AWS Budgets ("My Monthly Cost Budget", US$ 20/mês) e plano pago.
 
 ## Próximos passos
-1. ~~BDR-009/010~~ escritos e aceitos (12/11).
-2. **Dia 3 (próximo):** `etl/primeira_experiencia.py` (features da 1ª sessão: modelo, turnos, tamanho de resposta, horário/dia local, idioma 3 níveis, dispositivo, estado agrupado; tema e recusa por join com `temas_v2_qwen3_8b.parquet`) + `analysis/02_eda` (só gráficos com conclusão).
-3. Dia 4: `04_efeitos_e_confusao` (logística + efeito marginal em p.p. com IC; IPW para GPT-4 só nos períodos com os dois modelos; bruto × ajustado) e `05_semana_atipica` (mix × taxa; abr/2023 e jan/2024; falhas de coleta).
-4. Dia 5: Postgres + carga + Flask-smorest + Streamlit com tema (ADR-003).
+1. **Agora (13/11):** `etl/primeira_experiencia.py` (features da 1ª sessão: modelo, turnos, tamanho de resposta, horário/dia local, idioma 3 níveis, dispositivo, estado agrupado; tema em 7 grupos e recusa total por join com `temas_v2_qwen3_8b.parquet`) + `analysis/02_eda` (só gráficos com conclusão).
+2. **13/11, depois:** `04_efeitos_e_confusao` (logística + efeito marginal em p.p. com IC; IPW para GPT-4 só nos períodos com os dois modelos; bruto × ajustado) **com o mês atípico como seção final** (abr/2023 e jan/2024; mix × taxa). O notebook 05 foi cortado.
+3. **14/11:** Postgres + carga + Flask-smorest (4 endpoints) + Streamlit com 2 telas (ADR-003). `compose up` do zero.
+4. **15/11:** incidente §4.2 com teste de regressão, `INCIDENTE.md`, ADR-001 e ADR-007, `RELATORIO.md`.

@@ -1,4 +1,4 @@
-"""Validação manual da classificação de tema e recusa (ADR-011; meta do ADR-004: acurácia ≥ 85%).
+"""Validação manual da classificação de tema e recusa (ADR-004; meta: acurácia ≥ 85%).
 
 Subcomandos:
   amostra  sorteia N conversas estratificadas pelo tema previsto  -> data/work/validacao_{versao}/rotulos.csv
@@ -22,7 +22,7 @@ from pathlib import Path
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from classify_bedrock import MAX_CHARS_ASSISTENTE, MAX_CHARS_USUARIO, RECUSAS, TEMAS, carregar_entradas, truncar  # noqa: E402
+from classificacao import MAX_CHARS_ASSISTENTE, MAX_CHARS_USUARIO, RECUSAS, TEMAS, carregar_entradas, truncar  # noqa: E402
 from estatistica import Z95, wilson  # noqa: E402
 
 RAIZ = Path(__file__).resolve().parent.parent

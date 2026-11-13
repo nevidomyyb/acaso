@@ -1,0 +1,159 @@
+# Arquitetura
+
+Como o dashboard roda hoje (local) e como ele subiria na AWS. A decisão fica no
+[adr/ADR-006-arquitetura-aws.md](adr/ADR-006-arquitetura-aws.md).
+
+O enunciado exige que toda a infraestrutura e todo o custo do dashboard fiquem na AWS, inclusive o modelo de
+linguagem. A entrega roda local, e esta é a implantação descrita.
+
+---
+
+## 1. O fluxo
+
+```mermaid
+flowchart LR
+    subgraph fonte["Fonte"]
+        HF["WildChat-1M<br/>Hugging Face"]
+    end
+    subgraph aws["AWS"]
+        S3[("S3<br/>base bruta +<br/>classificação")]
+        GLUE["Glue Python Shell<br/>carga agendada"]
+        RDS[("RDS PostgreSQL<br/>base analítica")]
+        FG["ECS Fargate<br/>API Flask + Streamlit"]
+        ALB["ALB"]
+        CW["CloudWatch Logs"]
+        PS["Parameter Store<br/>senha do banco"]
+    end
+    PESSOA(["Pessoa de negócio"])
+
+    HF -->|"1x, com SHA-256"| S3
+    S3 -->|lê parquet| GLUE
+    GLUE -->|grava tabelas e pré-cálculos| RDS
+    RDS -->|SELECT| FG
+    FG --- ALB
+    ALB --> PESSOA
+    GLUE -.->|log e alarme| CW
+    FG -.->|log| CW
+    PS -.->|senha| GLUE
+    PS -.->|senha| FG
+```
+
+**A regra que o desenho respeita:** o dashboard nunca toca a base bruta. Ele só lê o RDS, e quem popula o RDS a
+partir do S3 é a carga.
+
+---
+
+## 2. Os 6 serviços
+
+| Serviço | Papel | Tamanho |
+|---|---|---|
+| **S3** | Guarda a base bruta em parquet e o parquet da classificação. Versionamento ligado | ~25 MB hoje |
+| **AWS Glue, tipo Python Shell** | A carga: lê o S3, aplica as definições (BDR-001 a 010), grava as tabelas e **pré-calcula** os agregados e os efeitos. Agendamento do próprio Glue, 1× por dia | 0,0625 DPU, ~10 min por execução |
+| **RDS PostgreSQL** | A base analítica que o dashboard lê | `db.t4g.micro`, 20 GB gp3, 1 AZ |
+| **ECS Fargate** | Uma tarefa com 2 containers: a API Flask (gunicorn) e o dashboard Streamlit. Imagens no ECR, atrás de um ALB | 1 vCPU, 2 GB |
+| **CloudWatch Logs** | Log da carga e da API. Um alarme: falha do job do Glue | Retenção de 30 dias |
+| **SSM Parameter Store** | Senha do banco, como `SecureString` | Nível padrão, sem custo |
+
+### Por que Glue Python Shell, e não Glue Spark
+
+O Glue tem dois tipos de job. O **Spark** serve a dados que não cabem numa máquina. A nossa base tem **22 MB**:
+Spark seria desproporcional, e o cluster custaria mais que o trabalho. O **Python Shell** é um processo Python
+agendado e gerenciado, cobrado por segundo. Ele roda o mesmo `etl/carga.py` da entrega local.
+
+O gargalo deste projeto é agendamento e observabilidade, não processamento. O Python Shell resolve os dois sem
+servidor para manter.
+
+**Duas frições a tratar na implantação:**
+1. O runtime do Python Shell fica atrás do Python 3.13 que usamos local. As bibliotecas extras (DuckDB,
+   statsmodels) entram por `--additional-python-modules`.
+2. Para gravar num RDS em subnet privada, o job precisa de uma **Glue Connection** com VPC, subnet e security
+   group.
+
+---
+
+## 3. A classificação de tema e recusa
+
+Ela não é um serviço do dashboard. Ela roda **antes**, e o resultado é um parquet versionado.
+
+| Quando | Como |
+|---|---|
+| No desafio | Uma EC2 `c7i.4xlarge` efêmera, com llama.cpp e Qwen3-8B, acesso só por SSM, destruída no fim. Custo medido: US$ 4,70 (ADR-004) |
+| Em produção | São ~41 novos usuários por semana. O próprio job do Glue classifica o lote da semana pelo **Bedrock**, quando a conta tiver cota. Sem instância para manter. Se o Bedrock seguir indisponível, o job dispara a mesma EC2 efêmera |
+
+O `docker compose up` **nunca** chama um LLM: a carga lê o parquet pronto.
+
+---
+
+## 4. Local × produção
+
+| Peça | Local (a entrega) | Produção (descrita) |
+|---|---|---|
+| Base bruta | `data/raw/wildchat_br.parquet`, no git | S3, com versionamento |
+| Carga | Container `etl` do compose, roda e termina | Job do Glue, agendado |
+| Base analítica | Postgres 16 em container | RDS PostgreSQL |
+| API + dashboard | 2 containers do compose | 1 tarefa do Fargate, 2 containers, atrás do ALB |
+| Segredos | `.env`, opcional | Parameter Store |
+| Log | Saída do container | CloudWatch Logs |
+
+**O código é o mesmo.** Muda quem o executa e de onde vêm os segredos. Essa é a razão de a carga ser um script
+Python simples, e não um passo acoplado a um serviço.
+
+---
+
+## 5. Custo por mês
+
+Ordem de grandeza, `us-east-1`, on-demand, 24 h por dia. **Confira no AWS Pricing Calculator antes de
+comprometer orçamento:** os preços unitários abaixo são a premissa do cálculo, não uma cotação conferida hoje.
+
+| Item | Premissa | US$/mês |
+|---|---|---|
+| RDS `db.t4g.micro` + 20 GB gp3 | ~US$ 0,016/h + armazenamento | ~14 |
+| ECS Fargate, 1 vCPU e 2 GB | ~US$ 0,04/vCPU-h + ~US$ 0,0044/GB-h | ~36 |
+| ALB | custo fixo + LCU | ~17 |
+| Glue Python Shell | 0,0625 DPU × US$ 0,44/DPU-h × ~5 h | < 1 |
+| S3 + CloudWatch | 25 MB + log de 30 dias | ~3 |
+| Parameter Store | nível padrão | 0 |
+| **Total** | | **≈ US$ 70** |
+
+**Como cortar pela metade:** o dashboard é interno e tem horário de uso. Desligar a tarefa do Fargate fora do
+horário comercial derruba o item maior. A classificação em produção fica em ~US$ 4/mês no Bedrock.
+
+---
+
+## 6. Segurança e privacidade
+
+- A base analítica **não tem** texto de conversa, `hashed_ip`, user-agent completo nem identificador exibível.
+  O texto só é lido na classificação, que acontece fora do caminho do dashboard.
+- Todo recorte na tela respeita k-anonimato, com k = 20.
+- RDS em subnet privada, sem acesso público. Só o ALB fica exposto.
+- Senha no Parameter Store, lida em tempo de execução pela role da tarefa. Nenhum segredo na imagem.
+- Permissões de menor privilégio: cada role recebe só o bucket e o prefixo de que precisa
+  ([../infra/aws/iam/](../infra/aws/iam/)).
+
+---
+
+## 7. O que ficou deliberadamente de fora
+
+| Deixado de fora | Por quê |
+|---|---|
+| Step Functions e EventBridge | A carga é um passo só. O agendamento do Glue basta |
+| ElastiCache ou Redis | As tabelas chegam prontas da carga, e cada consulta lê poucos milhares de linhas |
+| CloudFront | O público é interno e pequeno. O ALB entrega o suficiente |
+| Secrets Manager | O Parameter Store resolve, sem custo por segredo. Entra se houver rotação automática |
+| Glue Spark, Athena, Redshift | A base tem 22 MB |
+| Multi-AZ e réplica de leitura | O dashboard aceita indisponibilidade de minutos. Entram quando houver acordo de nível de serviço |
+
+Cada item desses entra quando um número justificar: volume de dados, número de pessoas na tela ou acordo de
+disponibilidade. Hoje nenhum justifica.
+
+---
+
+## 8. Como seria a implantação
+
+1. Infraestrutura como código (Terraform ou CloudFormation): VPC com 2 subnets privadas e 2 públicas, RDS,
+   bucket, roles, cluster do ECS, ALB e o job do Glue.
+2. `docker build` das duas imagens → ECR, com a etiqueta do commit.
+3. Migrations do banco por Alembic, num passo próprio antes do deploy.
+4. Primeira carga manual, pelo job do Glue, com o parquet já no S3.
+5. Deploy da tarefa do Fargate. O `GET /api/health` confere a API e o banco.
+6. Esteira: branch → PR com testes e lint → homologação com cópia da base → produção.

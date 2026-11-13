@@ -1,4 +1,4 @@
-# EC2 de classificação em CPU (ADR-011)
+# EC2 de classificação em CPU (ADR-004)
 
 Classifica tema e recusa com um LLM aberto (Qwen3-8B, llama.cpp) numa EC2 só com CPU. Motivo: a conta não tem cota no Bedrock nem GPU.
 

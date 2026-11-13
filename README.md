@@ -10,7 +10,7 @@
 docker compose up        # (em construção) Postgres + carga + API + dashboard
 ```
 
-O `.env` é opcional. Ele só guarda credenciais AWS para refazer a classificação no Bedrock. Modelo: [.env.example](.env.example).
+O `.env` é opcional. Ele só guarda credenciais AWS para refazer a classificação de tema e recusa (ADR-004). A classificação já vem pronta em `data/enriched/`. Modelo: [.env.example](.env.example).
 
 ## Como refazer a base bruta
 
@@ -29,8 +29,11 @@ Fonte: [allenai/WildChat-1M](https://huggingface.co/datasets/allenai/WildChat-1M
 | Documento | Conteúdo |
 |---|---|
 | [docs/METODOLOGIA.md](docs/METODOLOGIA.md) | Como cada número é calculado: definições, sensibilidade, IC, código e testes |
+| [docs/METODOLOGIA_LABEL.md](docs/METODOLOGIA_LABEL.md) | A rotulagem de tema e recusa: desenho, execução, validação e limites |
+| [docs/ARQUITETURA.md](docs/ARQUITETURA.md) | Os 6 serviços AWS, local × produção, custo por mês |
 | [docs/adr/](docs/adr/) | Decisões de arquitetura |
 | [docs/bdr/](docs/bdr/) | Decisões de negócio e definições |
 | [infra/aws/iam/](infra/aws/iam/) | Permissões AWS de menor privilégio |
+| [infra/aws/ec2/](infra/aws/ec2/) | EC2 de classificação: criar, acompanhar e destruir |
 | [docs/USO_DE_IA.md](docs/USO_DE_IA.md) | Log de uso de IA e horas |
 | [docs/DUVIDAS.md](docs/DUVIDAS.md) | Dúvidas enviadas e premissas adotadas |

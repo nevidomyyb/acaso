@@ -3,7 +3,7 @@
 **Status:** aceito · 2026-11-12
 
 ## Contexto
-O tema diz o que a pessoa foi fazer na estreia. Um LLM aberto classifica as 3.361 conversas da 1ª sessão em 11 temas (ADR-011). A validação manual de 151 conversas, às cegas, mede 71,4% de acerto nos 11 temas, abaixo da meta de 85%. Os erros ficam em temas vizinhos: estudo, trabalho e conhecimento geral.
+O tema diz o que a pessoa foi fazer na estreia. Um LLM aberto classifica as 3.361 conversas da 1ª sessão em 11 temas (ADR-004). A validação manual de 151 conversas, às cegas, mede 71,4% de acerto nos 11 temas, abaixo da meta de 85%. Os erros ficam em temas vizinhos: estudo, trabalho e conhecimento geral.
 
 ## Opções
 | Opção | Acerto ponderado (IC 95%) | Prós | Contras |

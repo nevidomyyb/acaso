@@ -138,7 +138,7 @@ def test_falha_de_coleta_na_janela_tira_do_denominador(base, tmp_path):
 
 def test_grupo_tema_cobre_os_11_temas_em_7_grupos():
     # BDR-009: todo tema do prompt tem grupo; nenhum grupo inventado.
-    from classify_bedrock import TEMAS
+    from classificacao import TEMAS
     from definicoes import GRUPO_TEMA, RECUSA_FATOR
 
     assert set(GRUPO_TEMA) == set(TEMAS)

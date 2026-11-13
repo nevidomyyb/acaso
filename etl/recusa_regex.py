@@ -1,7 +1,7 @@
 """Detector de recusa por expressões regulares (PT/EN).
 
-Serve como checagem cruzada da classificação por LLM (BDR-010) e como contingência se o Bedrock
-ficar indisponível. Olha só o início da resposta, onde as recusas aparecem.
+Serve como checagem cruzada da classificação por LLM (BDR-010) e como contingência se nenhum LLM
+estiver disponível. Olha só o início da resposta, onde as recusas aparecem.
 """
 
 from __future__ import annotations

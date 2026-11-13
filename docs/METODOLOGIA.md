@@ -3,7 +3,8 @@
 Este documento mostra a origem de cada número da análise. Ele cobre os registros de decisão, a análise de
 sensibilidade, o intervalo de confiança, o código linha a linha, os notebooks e os testes.
 
-- Escopo: a análise. O SQL dos indicadores do dashboard fica em `INDICADORES.md` (a escrever no Dia 6).
+- Escopo: a análise e os indicadores do dashboard (§11).
+- A etapa de rotulagem tem documento próprio: [METODOLOGIA_LABEL.md](METODOLOGIA_LABEL.md).
 - Plano e cronograma: [../PROJECT.md](../PROJECT.md). Decisões aceitas e fatos dos dados: [../CLAUDE.md](../CLAUDE.md).
 - Última conferência dos números: 12/11/2026.
 
@@ -28,7 +29,7 @@ sessão de 15 minutos.
 Por isso cada BDR tem uma seção que nenhum ADR tem: **Impacto no resultado**, com a taxa de cada opção. Veja
 [bdr/BDR-002-sessao.md](bdr/BDR-002-sessao.md): quatro opções, quatro taxas, quatro intervalos de confiança.
 
-ADR-004 (classificação no Bedrock) é um ADR, porque escolhe a ferramenta. BDR-009 (quais temas existem) e
+ADR-004 (com que LLM classificar) é um ADR, porque escolhe a ferramenta. BDR-009 (quais temas existem) e
 BDR-010 (o que é recusa) são BDRs, porque mudam a leitura do resultado.
 
 ---
@@ -377,7 +378,7 @@ cd analysis && ../.venv/bin/jupytext --to ipynb --execute 01_discovery.py
 
 ### 00_contagens_iniciais.py — script, não notebook
 [../analysis/00_contagens_iniciais.py](../analysis/00_contagens_iniciais.py). Roda em segundos. Responde:
-tamanho do recorte, qualidade básica, N para o custo do Bedrock, e se o relatório do incidente é reproduzível.
+tamanho do recorte, qualidade básica, N para o custo da classificação, e se o relatório do incidente é reproduzível.
 É script porque a saída é texto para decidir, e não gráfico para mostrar.
 
 ### 01_discovery.py — os problemas e os tratamentos
@@ -473,11 +474,13 @@ desafio: como perceber que um número mudou antes do cliente.
 
 ## 7. A classificação: LLM aberto em CPU numa EC2
 
-O Bedrock está bloqueado na conta nova, em todos os modelos, e a cota de GPU é 0 (ADR-011). O enunciado exige
-que o LLM rode na AWS. Por isso o tema e a recusa saem de um LLM aberto numa EC2 só com CPU.
+O enunciado exige que o LLM, se usado, rode na AWS. A conta é nova: o Bedrock tem cota 0 em todos os modelos
+e a cota de GPU também é 0. Por isso o tema e a recusa saem de um LLM aberto (Qwen3-8B, llama.cpp) numa EC2 só
+com CPU. As opções avaliadas estão no ADR-004.
 
 | Peça | O que faz |
 |---|---|
+| [../etl/classificacao.py](../etl/classificacao.py) | Fonte única da taxonomia, do texto de entrada, do schema e da validação |
 | [../etl/classificar_cpu.py](../etl/classificar_cpu.py) | Seleciona as 3.361 conversas da 1ª sessão, monta o corpo de cada requisição, envia ao S3 e coleta |
 | [../etl/llm_runner.py](../etl/llm_runner.py) | Roda na EC2: chama o llama-server, grava uma linha por conversa, retoma de onde parou |
 | [../infra/aws/ec2/](../infra/aws/ec2/) | Cria, acompanha e destrói a EC2; acesso só por SSM; modelos com revisão e SHA-256 fixados |
@@ -489,13 +492,13 @@ Três escolhas precisam de explicação:
 
 - **Escopo na 1ª sessão.** A pergunta é sobre a estreia. Classificar as 11.621 conversas em CPU levaria ~20 h.
   As 3.361 da 1ª sessão levam ~6 h.
-- **Saída por gramática.** O llama.cpp só deixa o modelo gerar JSON que cabe no schema (o mesmo do ADR-004).
+- **Saída por gramática.** O llama.cpp só deixa o modelo gerar JSON que cabe no `SCHEMA` de `etl/classificacao.py`.
   Assim nenhuma resposta sai fora do formato. O campo `motivo` tem limite de 90 caracteres, porque cada token de
   saída custa ~50 ms em CPU.
 - **Acurácia ponderada.** A amostra de validação garante um mínimo de casos por tema. Por isso a média simples
   da amostra superestima os temas raros. O número reportado pesa cada tema pelo tamanho dele na base.
 
-O ajuste usou 2 rodadas em 40 conversas (tabela no ADR-011). Essas 40 ficam fora da validação: medir nelas
+O ajuste usou 2 rodadas em 40 conversas (tabela no ADR-004). Essas 40 ficam fora da validação: medir nelas
 inflaria a acurácia.
 
 A validação manual (12/11) usa 151 conversas, rotuladas às cegas pela pessoa:
@@ -523,7 +526,7 @@ O tema e a recusa de cada usuário vêm da 1ª conversa da 1ª sessão. A sessã
 | 546 conversas acima de 1h · máx. 11 dias | `fim_utc − inicio_utc` | notebook 01, seção 4 |
 | 1% dos IPs = 41% das conversas | curva acumulada | notebook 01, seção 5 |
 | IP dinâmico ≥ 2% | UA raro em outro IP em 7 dias | notebook 01, seção 6 |
-| Classificação ≈ US$ 5 | c7i.4xlarge ≈ US$ 0,71/h × ~7 h (ADR-011) | `classificacao.sh log`; fatura da EC2 |
+| Classificação ≈ US$ 4,70 | c7i.4xlarge ≈ US$ 0,714/h × 6,6 h (ADR-004) | `classificacao.sh log`; fatura da EC2 |
 
 ---
 
@@ -574,3 +577,35 @@ calendário" daria 18,9% (−9,7 p.p.). Por isso o dashboard mostra a definiçã
 
 **Detalhe para ter na manga:** o fuso (BDR-005) só afeta o agrupamento das coortes, nunca a janela. A janela
 usa 7×24h absolutas, então horário de verão e fuso não a distorcem.
+
+---
+
+## 11. Os indicadores do dashboard
+
+Esta seção substitui o `INDICADORES.md` previsto no plano (corte de 13/11, `PROJECT.md` §14). Cada indicador do
+dashboard tem definição, numerador, denominador e regra de amostra mínima. Todos nascem das mesmas definições
+dos BDRs, pelo mesmo módulo `etl/definicoes.py` que a análise usa.
+
+| Indicador | Definição | Numerador ÷ denominador | Período | Fonte |
+|---|---|---|---|---|
+| **Novos usuários** | Pessoas cuja 1ª sessão começou no período | contagem de `usuario_id` elegíveis | mês (semana como detalhe) | `agg_coorte` |
+| **Taxa de retorno em 7 dias** | Quem abriu nova sessão até 7×24h do início da 1ª | `voltou_7d` ÷ elegíveis da coorte | mês (semana como detalhe) | `agg_coorte` |
+| **Efeito ajustado de um fator** | Diferença de retorno, em p.p., entre dois níveis do fator, com os outros fatores mantidos | efeito marginal médio da logística | base inteira | `resultado_efeitos` |
+| **% de 1ª conversa com recusa** | Quem levou recusa total na 1ª conversa da estreia (BDR-010) | com recusa total ÷ elegíveis | mês | `primeira_experiencia` |
+| **Mix de temas na estreia** | Distribuição dos 7 grupos de tema na 1ª conversa (BDR-009) | por grupo ÷ elegíveis | mês | `primeira_experiencia` |
+
+**Regras comuns a todos:**
+
+1. **Denominador = a coorte de novatos elegíveis.** `elegiveis()` tira 48 pessoas censuradas e 87 com falha de
+   coleta na janela. Ninguém conta como "não voltou" sem ter tido chance de voltar.
+2. **Todo número com IC de Wilson** (§3), nunca a proporção sozinha.
+3. **Amostra mínima:** se o IC passar de ±10 p.p. (cerca de 80 pessoas), a tela mostra o número esmaecido, com o
+   aviso "amostra insuficiente". O número nunca é escondido sem aviso.
+4. **k-anonimato, k = 20:** um recorte com menos de 20 pessoas não aparece. O estado com poucos usuários entra
+   em "outros".
+5. **Cada resposta da API carrega `definicao_versao` e `fonte`.** Se uma definição mudar, o número muda de
+   versão junto, e o rodapé da tela mostra qual versão gerou o valor.
+
+O SQL de cada indicador fica ao lado do seu endpoint, em `backend/`, e entra aqui no Dia 5. Os valores não são
+calculados no request: a carga grava `agg_coorte`, `resultado_efeitos` e `primeira_experiencia` já prontos
+(`PROJECT.md` §6.4).
