@@ -103,6 +103,7 @@ acaso/
 │   ├── prompts/
 │   │   ├── classificacao_v1.md # prompt de classificação, versionado
 │   │   └── classificacao_v2.md # v1 + 2 regras de desempate e 3 casos de `recusa = nao`
+│   ├── efeitos.py              # regressão: bruto × ajustado em p.p., com IC; taxa esperada pelo perfil; gera `resultado_efeitos`
 │   ├── primeira_experiencia.py # fatores da 1ª experiência, 1 linha por usuário (conteúdo da 1ª conversa, volume da 1ª sessão)
 │   └── carga.py                # (14/11) popula o Postgres a partir da base bruta (idempotente)
 │
@@ -112,12 +113,13 @@ acaso/
 │   ├── 01_discovery.py                 # qualidade dos dados: 10 problemas e tratamento (§5.1)
 │   ├── 03_definicoes_sensibilidade.py  # taxa padrão, funil e sensibilidade das definições (§4)
 │   ├── 02_eda.py                       # 1ª experiência sem ajuste: 6 gráficos, cada um com conclusão (§5.2)
-│   └── 04_efeitos_e_confusao.py        # (13/11) logística, efeito marginal, IPW e mês atípico (§5.3 a §5.5)
+│   └── 04_efeitos_e_confusao.py        # efeitos ajustados, seleção, GPT-4 no mesmo mês e a semana atípica (§5.3 a §5.5)
 │
 ├── tests/
 │   ├── conftest.py             # base sintética em memória, com retorno conhecido
 │   ├── test_definicoes.py      # testes das definições (pega mudança silenciosa)
 │   ├── test_primeira_experiencia.py # 1ª conversa × sessão, horário local, k-anonimato do estado
+│   ├── test_efeitos.py         # ajustado = bruto sem outro fator; ajuste desfaz confusão conhecida; taxa esperada
 │   ├── test_classificar_cpu.py # seleção, prompt, schema e leitura da saída do modelo
 │   ├── test_recusa_regex.py    # recusas e não recusas conhecidas
 │   └── test_validacao.py       # alocação estratificada e acurácia ponderada
@@ -202,19 +204,18 @@ Para cada uma: escolha principal + alternativas testadas + **quanto a taxa de re
 
 ### 5.3 Efeito de cada fator no retorno em 7 dias (com IC, ordenado)
 Fatores da 1ª experiência: modelo, tema, nº de turnos, tamanho da resposta, recusa, horário local, dia da semana, idioma em 3 níveis, `redacted`, dispositivo (mobile ou desktop pelo UA) e estado agrupado. O fator `toxic` sai da lista: a base pública removeu as conversas tóxicas, e o campo é 0 em todo o Brasil.
-- **Regressão logística multivariada** → apresentar como **diferença em pontos percentuais** (efeito marginal médio) com **IC 95%** (mais fácil para não técnico que odds ratio).
-- Bootstrap como checagem do IC.
+- **Regressão linear com todos os fatores juntos** (estado e mês como controles): o coeficiente de cada nível já é a **diferença em pontos percentuais** contra a referência, com **IC 95%** robusto (HC1). A regressão logística entra só como checagem (dá o mesmo número). Simplificado em 13/11: logística com efeito marginal, método delta, bootstrap e IPW saíram (METODOLOGIA §5, notebook 04).
 - Gráfico final: **forest plot** ordenado pelo tamanho do efeito.
 
 ### 5.4 Confusão: causa × seleção
 - Confundidores possíveis: quem escolhe GPT-4 já é mais engajado; horário reflete perfil (estudante × trabalhador); tema reflete intenção prévia; dispositivo; estado.
-- **Tratamento:** controle por perfil na regressão + **propensity score** (pareamento ou IPW) para os fatores principais (ex.: GPT-4), checando balanceamento (SMD < 0,1).
+- **Tratamento:** controle por perfil e por mês na regressão. O mês como controle faz cada comparação acontecer dentro do mesmo mês: é o que trata o GPT-4, que não existe de jul. a out./2023. Para o GPT-4, o passo a passo: bruto → mesmo mês → mesmo mês e mesmo perfil.
 - Comparar efeito **bruto × ajustado** → "quanto era seleção".
 - **O que prova e o que não prova:** não é experimento; viés por variáveis não observadas permanece; sugerir **teste A/B** para confirmar os efeitos principais.
 
 ### 5.5 Semana atípica
 - Encontrar uma semana em que o retorno subiu/caiu de forma relevante (fora do IC).
-- **Decomposição mix × taxa:** mudou o **perfil** de quem chegou ou mudou a **taxa dentro de cada perfil**?
+- **Decomposição perfil × taxa:** mudou o **perfil** de quem chegou ou mudou a **taxa dentro de cada perfil**? Conta: cada pessoa da semana recebe a taxa normal do seu perfil no resto da base; a média é a taxa esperada. Efeito do perfil = esperada − média; efeito da taxa = observada − esperada.
 - Cruzar com eventos de dados (mudança de modelo disponível, pico de novos, falha de coleta).
 
 ### 5.6 Saídas para o cliente
@@ -349,7 +350,7 @@ Consequências / o que muda se a premissa estiver errada: ...
 | 005 | Pré-cálculo na carga, sem cache externo | **não vira ADR.** Decisão registrada na §6.4 |
 | 006 | **Arquitetura AWS em 6 serviços: S3, Glue Python Shell, RDS, ECS Fargate, CloudWatch, Parameter Store** (vs. Glue Spark, Step Functions, EventBridge, ElastiCache, CloudFront) | **aceito (13/11)** |
 | 007 | Privacidade: o que o dashboard mostra e nunca mostra; k-anonimato | a escrever (15/11), meia página |
-| 008 | Método estatístico: logística + efeito marginal + IPW | **não vira ADR.** Decisão registrada em `docs/METODOLOGIA.md` |
+| 008 | Método estatístico: regressão linear (bruto × ajustado), com mês e estado como controles | **não vira ADR.** Decisão registrada em `docs/METODOLOGIA.md` §5 |
 | 010 | **Motor de análise/ETL local: DuckDB** (vs. pandas puro, Polars, Spark, carregar tudo no Postgres, **Polars + Postgres + dbt**) — lê parquet direto, processa fora da memória, SQL reaproveitável; dbt avaliado e adiado por risco de prazo (texto completo abaixo) | **aceito** |
 
 Exemplo preenchido (modelo para os demais):
@@ -475,12 +476,12 @@ A conta tem US$ 146,34 em créditos AWS, com validade até 19/12/2026. O custo d
 | **Ter 10/11** ✅ | Setup + dados | Repo e estrutura; download da WildChat-1M com SHA-256; recorte Brasil com DuckDB; contagens iniciais (N real → custo da classificação); ADR-002, 004 e 010; dúvidas rascunhadas | Parquet BR + primeiros números | 2 |
 | **Qua 11/11** ✅ | Discovery | Qualidade dos dados (§5.1); `etl/definicoes.py` + 10 testes; sensibilidade (§4); BDR-001 a 008; ADR-003; IAM e classificador prontos | `01_discovery`, `03_definicoes`, ADR/BDR | 3 |
 | **Qui 12/11** | Features + EDA | Classificação das 3.361 conversas da 1ª sessão na EC2 (ADR-004) e validação manual (BDR-009, BDR-010); tabela `primeira_experiencia`; EDA (§5.2) | `temas_v2_qwen3_8b.parquet`, `primeira_experiencia`, `02_eda` | 3 |
-| **Sex 13/11** | Features + análise | `primeira_experiencia.py`; EDA (§5.2); logística + efeitos marginais com IC; IPW; bruto × ajustado; mês atípico dentro do mesmo notebook; 3 achados. Escopo cortado e `ARQUITETURA.md` escritos | `primeira_experiencia`, `02_eda`, `04_efeitos` | 4 |
+| **Sex 13/11** | Features + análise | `primeira_experiencia.py`; EDA (§5.2); regressão com IC; bruto × ajustado; GPT-4 no mesmo mês; semana atípica (perfil × taxa); 3 achados. Escopo cortado e `ARQUITETURA.md` escritos | `primeira_experiencia`, `02_eda`, `04_efeitos` | 4 |
 | **Sáb 14/11** | Construção | Migrations + carga idempotente + pré-cálculos; Flask-smorest + 4 endpoints; **2 telas**; `docker compose up` do zero | Dashboard funcionando com dados reais | 5 |
 | **Dom 15/11** | Sustentação + docs | Incidente §4.2 com teste de regressão; `INCIDENTE.md` (inclui o que registrar em cada camada); ADR-001 e ADR-007; indicadores no METODOLOGIA §11; `RELATORIO.md` | `docs/` completo + testes passando | 3 |
 | **Seg 16/11** | Revisão + envio | Clonar em pasta limpa e rodar `docker compose up`; revisar o `RELATORIO.md` (curto!); fechar parágrafo de IA + horas; **enviar até ~20h** | E-mail enviado | 1–2 |
 
-**Se atrasar, cortar nesta ordem:** o 2º bloco da tela 2 → IPW (ficar só no bruto × ajustado por logística) → ADR-001 e ADR-007 (virar seção do RELATORIO).
+**Se atrasar, cortar nesta ordem:** o 2º bloco da tela 2 → ADR-001 e ADR-007 (virar seção do RELATORIO).
 **Já cortado em 13/11:** tela de Saúde e reconciliação automática, tela 3, cache em Redis, 2 endpoints, `INDICADORES.md`, `MONITORAMENTO.md` e 3 ADRs (§14).
 **Nunca cortar:** `compose up` do zero, 2 telas com IC, efeitos ajustados com IC, incidente, ADR/BDR, parágrafo de IA.
 
@@ -523,7 +524,7 @@ horas; a investigação do incidente.
 - [ ] `git clone` + `docker compose up` em pasta limpa → telas com dados reais
 - [ ] ≥2 telas; cada número com definição, fonte e IC; aviso de amostra pequena
 - [ ] Efeitos ordenados com IC; bruto × ajustado; o que prova / não prova
-- [ ] Semana atípica com decomposição mix × taxa
+- [ ] Semana atípica com decomposição perfil × taxa
 - [ ] 3 achados → 3 decisões
 - [ ] Qualidade de dados: problemas + tratamentos
 - [ ] Sensibilidade das definições

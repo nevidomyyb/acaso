@@ -290,7 +290,7 @@ for nome, df in [("base inteira", el), ("só meses com os dois", el[el.coorte_me
 # - **Sem ajuste, o modelo não separa quem volta:** 28% (GPT-3.5) e 29% (GPT-4) na base inteira.
 # - A comparação bruta é **injusta**: o modelo muda com o mês, e o mês muda o perfil de quem chega (lançamento,
 #   férias). Nos 6 meses com os dois modelos, o GPT-4 fica 2 p.p. acima, com IC sobreposto.
-# - **Decisão para o notebook 04:** comparar modelos **só nos meses com os dois**, com IPW por perfil.
+# - **Decisão para o notebook 04:** comparar modelos **dentro do mesmo mês**, com o mês como controle do ajuste.
 
 # %% [markdown]
 # ## 7. O que vai para o notebook 04
@@ -303,7 +303,7 @@ for nome, df in [("base inteira", el), ("só meses com os dois", el[el.coorte_me
 # | Dispositivo | celular −3 p.p. (−5 contra o desktop) | Fator, com a ressalva de medição (seção 5) |
 # | Idioma | "outro" −10 p.p. | Fator, 3 níveis; compete com a saudação |
 # | Tamanho da 1ª resposta | 1º quartil −6 p.p. | Fator em quartis; compete com a saudação |
-# | Modelo | ≈ 0 bruto | Só nos meses com os dois modelos, com IPW |
+# | Modelo | ≈ 0 bruto | Fator; o mês como controle faz a comparação dentro do mesmo mês |
 # | Estado | Rio −11 p.p. | Controle, não achado |
 # | Mês da estreia | abr/2023 e jan/2024 fora do padrão | Controle; seção do mês atípico |
 # | Volume da 1ª sessão | +23 p.p. com 10 ou mais respostas | **Fora** do modelo principal (engajamento); entra na sensibilidade |

@@ -6,7 +6,7 @@ sensibilidade, o intervalo de confiança, o código linha a linha, os notebooks 
 - Escopo: a análise e os indicadores do dashboard (§11).
 - A etapa de rotulagem tem documento próprio: [METODOLOGIA_LABEL.md](METODOLOGIA_LABEL.md).
 - Plano e cronograma: [../PROJECT.md](../PROJECT.md). Decisões aceitas e fatos dos dados: [../CLAUDE.md](../CLAUDE.md).
-- Última conferência dos números: 12/11/2026.
+- Última conferência dos números: 13/11/2026.
 
 ---
 
@@ -445,6 +445,68 @@ pessoa vira um "novo" usuário que nunca volta.
 retorno: uma recusa encurta a sessão, e a sessão curta volta menos. Controlar pelo volume apagaria parte do efeito
 da recusa. O modelo principal mede o efeito total; o modelo com volume entra como sensibilidade.
 
+### 04_efeitos_e_confusao.py — efeito de cada fator, confusão e a semana atípica
+[../analysis/04_efeitos_e_confusao.py](../analysis/04_efeitos_e_confusao.py). O cálculo fica em
+[../etl/efeitos.py](../etl/efeitos.py), e não no notebook. Motivo: a carga grava a mesma tabela
+(`resultado_efeitos`) para o dashboard, com o mesmo código.
+
+**Glossário.** São 10 termos; nenhum outro aparece no notebook.
+
+| Termo | Significado |
+|---|---|
+| Novato | Pessoa (IP) vista na sua 1ª sessão **na base**, e não na vida: quem usou antes de 09/04/2023 também conta (BDR-003). Cada pessoa entra uma vez. Elegíveis: 2.219 (funil em §4.1) |
+| n | Quantos novatos têm aquele nível do fator (ex.: celular, n = 706). A referência não aparece na tabela (desktop = 2.219 − 706). Quanto menor o n, mais largo o IC |
+| Taxa de retorno | % dos novatos do grupo que abriram nova sessão em até 7 dias |
+| p.p. (ponto percentual) | Diferença entre duas taxas: de 30% para 20% = −10 p.p. (§2.3) |
+| Referência | O grupo contra o qual cada nível é comparado (ex.: tema "tarefa", horário "tarde") |
+| Bruto | Taxa do grupo − taxa da referência, sem ajuste |
+| Ajustado | A mesma diferença, entre pessoas iguais nos outros fatores (tema, horário, idioma, dispositivo, estado e mês) |
+| Seleção (confusão) | A parte do bruto que vem do perfil de quem tem o fator. Seleção = bruto − ajustado |
+| Controle | Variável que entra no ajuste só para igualar os grupos e não vira achado (estado e mês) |
+| IC 95% | Faixa onde o efeito real deve estar (§3). Se cruza o zero, o dado não separa o efeito de "nenhum efeito" |
+
+**O método** (a decisão do ADR-008, que não virou ADR). Simplificado em 13/11 (ver abaixo):
+
+| Peça | O que faz | Por quê |
+|---|---|---|
+| Regressão linear, com todos os fatores juntos | Retorno (1 = voltou, 0 = não) contra os 7 fatores, com estado e mês como controles | Num resultado 0/1, o coeficiente já é a diferença em p.p., com os outros fatores fixos. É a unidade do dashboard |
+| IC com erro-padrão robusto (HC1) | Sai direto da regressão | Num resultado 0/1, a variância muda de pessoa para pessoa; o erro-padrão robusto corrige isso |
+| Mês como controle | Cada comparação acontece dentro do mesmo mês | Trata a confusão do GPT-4 com o tempo: sem GPT-4 de jul. a out./2023 |
+| Volume da sessão fora do ajuste principal | Entra só na sensibilidade | É consequência da experiência: controlar por ele esconderia parte do efeito da recusa |
+| Regressão logística, só como checagem | O mesmo ajuste, no formato feito para sim/não | Responde "por que linear?": a logística dá −16,2 contra −17,4 na recusa |
+| Taxa esperada pelo perfil (semana atípica) | Cada pessoa da semana recebe a taxa normal do seu grupo; a média é a taxa esperada | Separa perfil × taxa sem modelo: efeito do perfil = esperada − média; efeito da taxa = observada − esperada |
+
+**Os resultados:**
+
+| § | Pergunta | Resposta |
+|---|---|---|
+| 1 | efeito de cada fator, em ordem | recusa total −17,4 p.p. (IC −25,4 a −9,4); conselho pessoal +17,1 (n = 49); idioma "outro" −8,0; manhã +5,3; o resto com IC que cruza o zero |
+| 2 | quanto era seleção | GPT-4 +0,6 → −3,7; saudação −7,3 → −4,3; recusa −14,2 → −17,4 (o ajuste aumenta o efeito) |
+| 3 | GPT-4 no mesmo mês | bruto +0,6 (base) e +2,0 (6 meses com os dois) → −1,0 no mesmo mês → −3,7 (IC −9,4 a +2,0) com o perfil igual: sem evidência de ganho |
+| 4 | sensibilidade da recusa | entre −15,5 e −17,4 com volume, regex e logística; −10,0 na sessão inteira (BDR-010) |
+| 5 | semana atípica | 17 e 24/07/2023: 8,6% (5 de 58; IC 3,7–18,6%) contra 28,6–29,8% esperados por qualquer perfil; perfil < 1 p.p., taxa ≈ −20 p.p.; o resto do mundo não cai |
+
+**A checagem global da semana** usa uma definição simplificada (IP, conversa entre 1h e 7 dias), igual para o
+Brasil e para o resto do mundo, só para comparar a tendência.
+
+**A simplificação de 13/11.** A 1ª versão usava logística com efeito marginal médio, IC pelo método delta,
+bootstrap, IPW com diferença padronizada (SMD) para o GPT-4 e um modelo para a semana. A pessoa pediu menos
+jargão para defender cada número. Antes da troca, a versão simples foi conferida contra a antiga:
+
+| Número | Versão antiga | Versão simples |
+|---|---|---|
+| Recusa total | −16,2 (IC −22,9 a −9,4) | −17,4 (IC −25,4 a −9,4) |
+| GPT-4 com grupos iguais | IPW −3,3 (IC −9,5 a +3,0) | regressão −3,7 (IC −9,4 a +2,0) |
+| Semana de 17/07 sozinha: taxa esperada | 28,3% (modelo) | 27,6% a 29,5% (conforme o perfil) |
+
+Nenhuma conclusão mudou. Os outros efeitos mudaram até 0,4 p.p.
+
+**Como explicar em voz alta (4 frases):**
+1. "Comparo a taxa de retorno de quem tem cada fator com a de quem não tem, primeiro sem ajuste."
+2. "Depois comparo pessoas iguais em todo o resto, com uma regressão; a diferença entre as duas contas é seleção."
+3. "O GPT-4 parece ajudar, mas só porque ele existe nos meses que já voltam mais; no mesmo mês, a vantagem some."
+4. "Na semana de julho, quem chegou era igual ao público de sempre; o que caiu foi a taxa, e só no Brasil."
+
 ### estilo.py
 [../analysis/estilo.py](../analysis/estilo.py). Paleta única, validada para daltonismo. `aplicar()` ajusta o
 `rcParams`. `nota()` escreve a fonte no pé de **todo** gráfico. Isso atende o requisito "cada número com
@@ -455,8 +517,9 @@ definição e fonte" sem depender de disciplina manual a cada gráfico.
 ## 6. Os testes
 
 [../tests/test_definicoes.py](../tests/test_definicoes.py) e [../tests/conftest.py](../tests/conftest.py).
-Última execução em 13/11: **33 testes passaram**, em 1,8 s. Desta seção, 11 são de definição. Os outros cobrem a
-classificação (§7) e a tabela da 1ª experiência
+Última execução em 13/11: **36 testes passaram**, em 4,4 s. Desta seção, 11 são de definição. Os outros cobrem a
+classificação (§7), os efeitos ([../tests/test_efeitos.py](../tests/test_efeitos.py), 3 testes: sem outro fator, ajustado
+= bruto; o ajuste recupera um efeito conhecido que o bruto erra por seleção; a taxa esperada pelo perfil) e a tabela da 1ª experiência
 ([../tests/test_primeira_experiencia.py](../tests/test_primeira_experiencia.py), 4 testes: conteúdo da 1ª conversa
 × volume da sessão, horário local com virada de dia, estado com menos de k usuários → "outros", e o mesmo
 denominador de `elegiveis()`).
@@ -556,6 +619,9 @@ O tema e a recusa de cada usuário vêm da 1ª conversa da 1ª sessão. A sessã
 | 94% dos retornos em 30 dias caem em 7 dias | 2ª sessão − 1ª, observáveis por 30 dias (2.043) | notebook 02, seção 1 |
 | Recusa total 15,1% × 29,3% · n = 106 | `primeira_experiencia` + Wilson | notebook 02, seção 2 |
 | Rio de Janeiro 17,5% · n = 257 | `estado_grupo` + Wilson | notebook 02, seção 5 |
+| Recusa total −17,4 p.p. (IC −25,4 a −9,4) | regressão linear com IC robusto (`etl/efeitos.py`) | notebook 04, seção 1 |
+| GPT-4 −3,7 p.p. (IC −9,4 a +2,0); −1,0 no mesmo mês | regressão (mês como controle); média das diferenças mês a mês | notebook 04, seção 3 |
+| Semanas de 17 e 24/07/2023: 8,6% × 28,6–29,8% esperados | `taxa_esperada` com a taxa de cada perfil no resto da base | notebook 04, seção 5 |
 | Classificação ≈ US$ 4,70 | c7i.4xlarge ≈ US$ 0,714/h × 6,6 h (ADR-004) | `classificacao.sh log`; fatura da EC2 |
 
 ---
@@ -620,7 +686,7 @@ dos BDRs, pelo mesmo módulo `etl/definicoes.py` que a análise usa.
 |---|---|---|---|---|
 | **Novos usuários** | Pessoas cuja 1ª sessão começou no período | contagem de `usuario_id` elegíveis | mês (semana como detalhe) | `agg_coorte` |
 | **Taxa de retorno em 7 dias** | Quem abriu nova sessão até 7×24h do início da 1ª | `voltou_7d` ÷ elegíveis da coorte | mês (semana como detalhe) | `agg_coorte` |
-| **Efeito ajustado de um fator** | Diferença de retorno, em p.p., entre dois níveis do fator, com os outros fatores mantidos | efeito marginal médio da logística | base inteira | `resultado_efeitos` |
+| **Efeito ajustado de um fator** | Diferença de retorno, em p.p., entre dois níveis do fator, com os outros fatores mantidos | coeficiente da regressão linear, com IC robusto | base inteira | `resultado_efeitos` |
 | **% de 1ª conversa com recusa** | Quem levou recusa total na 1ª conversa da estreia (BDR-010) | com recusa total ÷ elegíveis | mês | `primeira_experiencia` |
 | **Mix de temas na estreia** | Distribuição dos 7 grupos de tema na 1ª conversa (BDR-009) | por grupo ÷ elegíveis | mês | `primeira_experiencia` |
 
