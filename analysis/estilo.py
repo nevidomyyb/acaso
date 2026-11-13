@@ -40,6 +40,7 @@ def aplicar() -> None:
             "axes.spines.right": False,
             "axes.grid": True,
             "axes.grid.axis": "y",
+            "axes.axisbelow": True,  # grade atrás das barras
             "grid.color": GRADE,
             "grid.linewidth": 0.8,
             "xtick.color": TINTA_MUDA,

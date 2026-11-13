@@ -418,9 +418,32 @@ O gráfico de coortes ([seção 4](../analysis/03_definicoes_sensibilidade.py#L1
 Ele mostra a linha mensal com faixa de IC, e os pontos semanais com barras de erro largas por cima. O argumento
 fica visual, sem vocabulário de estatística.
 
-### Por que não existe 02_eda
-O notebook 02 é do Dia 3. A numeração ficou reservada no plano. O 03 veio antes porque a definição vem antes da
-análise: sem a definição de "voltar", não há o que explorar.
+### 02_eda.py — a 1ª experiência, sem ajuste
+[../analysis/02_eda.py](../analysis/02_eda.py). Lê a tabela de [../etl/primeira_experiencia.py](../etl/primeira_experiencia.py):
+uma linha por usuário, com o **conteúdo** da 1ª conversa (tema, recusa, modelo, idioma, tamanho da resposta,
+dispositivo, estado) e o **volume** da 1ª sessão (conversas, respostas, duração). O 03 veio antes porque a
+definição vem antes da análise: sem a definição de "voltar", não há o que explorar.
+
+Todo número do 02 é **bruto**, com IC de Wilson. Cada gráfico sustenta uma conclusão:
+
+| § | Gráfico | Conclusão | Decisão para o 04 |
+|---|---|---|---|
+| 1 | quando a pessoa volta | 94% dos retornos em 30 dias caem em 7 dias; 55% dos retornos em 7 dias, em até 6 h | a janela de 7 dias perde pouco |
+| 2 | tema, recusa, tamanho da resposta | recusa total 15% × 29%; saudação 22% | recusa e tema como fatores |
+| 3 | idioma, dispositivo, horário, dia | idioma "outro" 19% (54% é saudação); madrugada 22%; celular 25% | idioma compete com a saudação |
+| 4 | volume da 1ª sessão | 10 ou mais respostas: 52%; uma só: 23% | **fora** do modelo principal: é engajamento |
+| 5 | estado | Rio de Janeiro 17,5% nos dois dispositivos | estado como controle; risco 1 |
+| 6 | % de GPT-4 por mês | sem GPT-4 de jul. a out./2023 | comparar modelos só nos 6 meses com os dois |
+
+**O caso do Rio** ([seção 5](../analysis/02_eda.py)). O Rio tem 55% de celular, contra 29% no resto. Mas o
+retorno fica baixo no desktop (19%) e no celular (16%), então o mix não explica a queda. A query do IP dinâmico do
+notebook 01 foi refeita para a frente: o user-agent raro da estreia reaparece em **outro** IP nos 7 dias
+seguintes. No Rio, isso acontece 2 a 3 vezes mais. É um piso, não o valor real. A hipótese é medição: a mesma
+pessoa vira um "novo" usuário que nunca volta.
+
+**Por que o volume fica fora do modelo principal.** O volume da sessão está no caminho entre a experiência e o
+retorno: uma recusa encurta a sessão, e a sessão curta volta menos. Controlar pelo volume apagaria parte do efeito
+da recusa. O modelo principal mede o efeito total; o modelo com volume entra como sensibilidade.
 
 ### estilo.py
 [../analysis/estilo.py](../analysis/estilo.py). Paleta única, validada para daltonismo. `aplicar()` ajusta o
@@ -432,7 +455,11 @@ definição e fonte" sem depender de disciplina manual a cada gráfico.
 ## 6. Os testes
 
 [../tests/test_definicoes.py](../tests/test_definicoes.py) e [../tests/conftest.py](../tests/conftest.py).
-10 testes, 1,9 s. Última execução em 12/11: 10 passaram.
+Última execução em 13/11: **33 testes passaram**, em 1,8 s. Desta seção, 11 são de definição. Os outros cobrem a
+classificação (§7) e a tabela da 1ª experiência
+([../tests/test_primeira_experiencia.py](../tests/test_primeira_experiencia.py), 4 testes: conteúdo da 1ª conversa
+× volume da sessão, horário local com virada de dia, estado com menos de k usuários → "outros", e o mesmo
+denominador de `elegiveis()`).
 
 A base de teste é **sintética** ([conftest.py](../tests/conftest.py#L44-L85)), construída com pyarrow no mesmo
 schema parcial da WildChat. Motivo: nos dados reais a resposta certa é desconhecida, então um teste contra eles
@@ -526,6 +553,9 @@ O tema e a recusa de cada usuário vêm da 1ª conversa da 1ª sessão. A sessã
 | 546 conversas acima de 1h · máx. 11 dias | `fim_utc − inicio_utc` | notebook 01, seção 4 |
 | 1% dos IPs = 41% das conversas | curva acumulada | notebook 01, seção 5 |
 | IP dinâmico ≥ 2% | UA raro em outro IP em 7 dias | notebook 01, seção 6 |
+| 94% dos retornos em 30 dias caem em 7 dias | 2ª sessão − 1ª, observáveis por 30 dias (2.043) | notebook 02, seção 1 |
+| Recusa total 15,1% × 29,3% · n = 106 | `primeira_experiencia` + Wilson | notebook 02, seção 2 |
+| Rio de Janeiro 17,5% · n = 257 | `estado_grupo` + Wilson | notebook 02, seção 5 |
 | Classificação ≈ US$ 4,70 | c7i.4xlarge ≈ US$ 0,714/h × 6,6 h (ADR-004) | `classificacao.sh log`; fatura da EC2 |
 
 ---

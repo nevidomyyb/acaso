@@ -12,8 +12,8 @@ Olá, Nathalia e Daniele, tudo bem?
 
 Tenho quatro dúvidas de escopo. Ao lado de cada uma, indico a premissa que sigo se não houver resposta a tempo.
 
-1. **Classificação por LLM.** Posso entregar a classificação de tema e recusa já calculada no Amazon Bedrock e versionada no repositório? Assim o `docker compose up` sobe sem credenciais AWS.
-   *Premissa:* entrego a classificação pronta e o script que a refaz no Bedrock.
+1. **Classificação por LLM.** Posso entregar a classificação de tema e recusa já calculada e versionada no repositório? Assim o `docker compose up` sobe sem credenciais AWS.
+   *Premissa:* entrego a classificação pronta e o script que a refaz na AWS.
 
 2. **Frontend.** Há uma stack preferida para o frontend?
    *Premissa:* a escolha é livre.

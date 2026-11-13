@@ -4,7 +4,7 @@ Riscos da solução e decisões que dependem do time ou do cliente. Atualizado a
 
 | # | Risco | Efeito no resultado | Mitigação no projeto | Decisão a escalar (quem) |
 |---|---|---|---|---|
-| 1 | Usuário = IP (compartilhado ou dinâmico) | IP dinâmico subestima o retorno (≥ 2% dos novos IPs); IP compartilhado junta pessoas | Sensibilidade no BDR-001 | Login ou ID anônimo persistente no produto (cliente) |
+| 1 | Usuário = IP (compartilhado ou dinâmico) | IP dinâmico subestima o retorno (≥ 2% dos novos IPs); IP compartilhado junta pessoas. Evidência local (13/11, notebook 02): o Rio de Janeiro tem 17,5% de retorno, contra 28,6%, nos dois dispositivos, e lá o user-agent raro reaparece em outro IP 2 a 3× mais. Parte da queda pode ser medição. O celular (−5 p.p. contra o desktop) tem a mesma suspeita | Sensibilidade no BDR-001 | Login ou ID anônimo persistente no produto (cliente) |
 | 2 | Base pública sem conversas tóxicas e com PII removida | Retorno subestimado; fator "toxicidade" não mensurável | Registro explícito; o fator sai da análise | Usar o log completo do produto (cliente) |
 | 3 | Base pequena: 2.219 pessoas, ~39 por semana | IC semanal de ±15 p.p.; efeitos pequenos não aparecem | Coorte mensal; aviso de amostra pequena | Aceitar leitura mensal (cliente) |
 | 4 | Efeitos observacionais | Confusão residual por variáveis não observadas | Ajuste por perfil + IPW; bruto × ajustado | Teste A/B antes de mudanças grandes (cliente) |

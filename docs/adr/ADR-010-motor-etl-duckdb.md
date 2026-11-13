@@ -20,6 +20,6 @@ Opção F. As definições ficam em SQL, que migra quase direto para os indicado
 
 ## Consequências
 - Testes de definição em pytest com dados sintéticos substituem os testes do dbt.
-- A linhagem fica documentada à mão em `docs/INDICADORES.md`.
+- A linhagem fica documentada à mão em `docs/METODOLOGIA.md`: a origem de cada número da análise (§8) e de cada indicador do dashboard (§11).
 - Em produção: o mesmo job DuckDB roda num Glue Python Shell (ADR-006). Athena entra só se a base crescer muito.
 - Se o volume crescer (mais países, carga diária): migrar as definições para dbt.

@@ -2,7 +2,6 @@
 ## Análise e Dashboard de Retenção de um Assistente de IA (WildChat-1M, Brasil)
 
 > **Prazo de entrega:** segunda **16/11/2026, 23h59** → nathalia.anjos@aca.so e daniele.cardoso@aca.so
-> **Prazo para dúvidas:** **quarta 11/11** (mesmos e-mails). Sem resposta a tempo → registrar a premissa e seguir.
 > **Dedicação esperada pelo desafio:** ~12h. Este plano prevê ~20h. Escopo reduzido em 13/11 (§14).
 > **Depois:** conversa de 60 min com o gestor = 20 min de apresentação + 40 min de entrevista técnica (fluxo de construção, decisões registradas, o que faria diferente).
 
@@ -29,7 +28,7 @@
 | Dashboard | Não técnico entende sozinho; efeito com incerteza e fonte | §6 |
 | Construção e código | Sobe do zero; dados reais; código legível e testado; decisões registradas | §3, §7, §8.3, §10 |
 | Clareza e premissas | Documento objetivo; premissas, riscos e escalonamentos explícitos | §4, §11, `docs/RELATORIO.md` |
-| Apresentação | Explicar em 20 min e defender escolhas | §16 |
+| Apresentação | Explicar em 20 min e defender escolhas | §15 |
 | Uso de IA | IA com critério e conferida | §12 |
 
 ---
@@ -68,7 +67,7 @@
 
 ### 3.2 Estrutura do repositório
 
-Estado em 12/11. **(D5)** = previsto para o Dia 5 do cronograma (§13), e assim por diante.
+Estado em 13/11. A data entre parênteses = dia previsto no cronograma (§13) para o que ainda não existe.
 
 ```
 acaso/
@@ -78,21 +77,23 @@ acaso/
 ├── requirements-analysis.txt   # dependências da análise, com versão fixada
 ├── ruff.toml · pytest.ini      # lint (linha de 120) e testes
 ├── .env.example                # modelo do .env: credenciais AWS e bucket do projeto
-├── docker-compose.yml          # (D5) Postgres + carga + API + dashboard
+├── docker-compose.yml          # (14/11) Postgres + download + carga + API + dashboard, do zero;
+│                               #   monta ./data como volume: base já baixada (SHA-256 ok) não baixa de novo
 │
 ├── data/
-│   ├── raw/
-│   │   ├── wildchat-1m/        # base pública completa, 3,36 GB (fora do git)
+│   ├── raw/                    # FORA do git: o compose baixa e gera do zero
+│   │   ├── wildchat-1m/        # base pública completa, 3,36 GB, com SHA-256 conferido
 │   │   ├── wildchat_br.parquet # recorte Brasil, 22 MB (+ manifesto): a base bruta que a carga lê
 │   │   └── wildchat_volume_diario.parquet   # volume diário global → detecta falha de coleta
-│   ├── enriched/               # tema e recusa classificados pelo LLM, versionados no git
+│   ├── enriched/               # tema e recusa do Qwen3-8B (ADR-004): o único dado no git, porque refazer exige a EC2
 │   └── work/                   # intermediários, entrada/saída da EC2 e rótulos manuais (fora do git)
 │
 ├── etl/
 │   ├── download.py             # baixa a WildChat-1M e confere o SHA-256 de cada parquet
 │   ├── recorte_brasil.py       # gera o recorte Brasil e o volume diário global
-│   ├── definicoes.py           # FONTE ÚNICA das definições (BDR-001 a 008):
-│   │                           #   conversas → eventos → sessões → usuários; `elegiveis()` = denominador
+│   ├── definicoes.py           # FONTE ÚNICA das definições (BDR-001 a 010):
+│   │                           #   conversas → eventos → sessões → usuários; `elegiveis()` = denominador;
+│   │                           #   `GRUPO_TEMA` e `RECUSA_FATOR` (BDR-009 e 010)
 │   ├── estatistica.py          # intervalo de confiança de Wilson
 │   ├── recusa_regex.py         # detecta recusa por regex PT/EN: checagem cruzada e contingência
 │   ├── classificacao.py        # taxonomia, entrada, schema e validação da classificação (ADR-004)
@@ -102,20 +103,21 @@ acaso/
 │   ├── prompts/
 │   │   ├── classificacao_v1.md # prompt de classificação, versionado
 │   │   └── classificacao_v2.md # v1 + 2 regras de desempate e 3 casos de `recusa = nao`
-│   ├── primeira_experiencia.py # (D3) features da 1ª sessão, 1 linha por usuário
-│   └── carga.py                # (D5) popula o Postgres a partir da base bruta (idempotente)
+│   ├── primeira_experiencia.py # fatores da 1ª experiência, 1 linha por usuário (conteúdo da 1ª conversa, volume da 1ª sessão)
+│   └── carga.py                # (14/11) popula o Postgres a partir da base bruta (idempotente)
 │
 ├── analysis/                   # fonte em .py (jupytext, formato percent); o .ipynb é gerado
 │   ├── estilo.py               # paleta dos gráficos e rodapé com a fonte de cada número
 │   ├── 00_contagens_iniciais.py        # script: contagens do recorte e teste do incidente
 │   ├── 01_discovery.py                 # qualidade dos dados: 10 problemas e tratamento (§5.1)
 │   ├── 03_definicoes_sensibilidade.py  # taxa padrão, funil e sensibilidade das definições (§4)
-│   ├── 02_eda.py                       # (D3) padrões da 1ª experiência (§5.2)
-│   └── 04_efeitos_e_confusao.py        # (D4) logística, efeito marginal, IPW e mês atípico (§5.3 a §5.5)
+│   ├── 02_eda.py                       # 1ª experiência sem ajuste: 6 gráficos, cada um com conclusão (§5.2)
+│   └── 04_efeitos_e_confusao.py        # (13/11) logística, efeito marginal, IPW e mês atípico (§5.3 a §5.5)
 │
 ├── tests/
 │   ├── conftest.py             # base sintética em memória, com retorno conhecido
 │   ├── test_definicoes.py      # testes das definições (pega mudança silenciosa)
+│   ├── test_primeira_experiencia.py # 1ª conversa × sessão, horário local, k-anonimato do estado
 │   ├── test_classificar_cpu.py # seleção, prompt, schema e leitura da saída do modelo
 │   ├── test_recusa_regex.py    # recusas e não recusas conhecidas
 │   └── test_validacao.py       # alocação estratificada e acurácia ponderada
@@ -123,22 +125,22 @@ acaso/
 ├── infra/aws/iam/              # políticas de menor privilégio (S3)
 ├── infra/aws/ec2/              # cria, acompanha e destrói a EC2 de classificação (acesso só por SSM)
 │
-├── db/                         # (D5) migrations do schema + SQL de cada indicador
-├── backend/                    # (D5) Flask + flask-smorest: resources, schemas, queries, observabilidade
-├── frontend/                   # (D5) Streamlit com tema próprio, lendo só a API
+├── db/                         # (14/11) migrations do schema + SQL de cada indicador
+├── backend/                    # (14/11) Flask + flask-smorest: 4 endpoints, schemas, observabilidade
+├── frontend/                   # (14/11) Streamlit com tema próprio, 2 telas, lendo só a API
 │
 └── docs/
     ├── desafio/enunciado.txt   # texto do enunciado, para busca
-    ├── adr/                    # ADR-002, 003, 004, 010 (+ modelo e índice)
-    ├── bdr/                    # BDR-001 a 008 (+ modelo e índice)
+    ├── adr/                    # ADR-002, 003, 004, 006, 010 (+ modelo e índice); 001 e 007 em 15/11
+    ├── bdr/                    # BDR-001 a 010 (+ modelo e índice)
     ├── DUVIDAS.md              # dúvidas e a premissa de cada uma
     ├── RISCOS.md               # riscos e decisões a escalar (§11)
     ├── USO_DE_IA.md            # log contínuo e parágrafo final (§12)
     ├── METODOLOGIA.md          # origem de cada número + indicadores do dashboard (§6.2)
     ├── METODOLOGIA_LABEL.md    # a rotulagem de tema e recusa
     ├── ARQUITETURA.md          # 6 serviços AWS, local × produção, custo
-    ├── RELATORIO.md            # (D6) documento curto: achados e decisões
-    └── INCIDENTE.md            # (D6) resposta da §4.2 + o que registrar em cada camada
+    ├── RELATORIO.md            # (15/11) documento curto: achados e decisões
+    └── INCIDENTE.md            # (15/11) resposta da §4.2 + o que registrar em cada camada
 ```
 
 ### 3.3 Modelo da base analítica (rascunho)
@@ -340,13 +342,13 @@ Consequências / o que muda se a premissa estiver errada: ...
 
 | ADR | Decisão | Status |
 |---|---|---|
-| 001 | Base analítica em PostgreSQL | a escrever (D5), meia página |
+| 001 | Base analítica em PostgreSQL | a escrever (15/11), meia página |
 | 002 | **Backend em Flask + flask-smorest** (vs. FastAPI, Django REST) — familiaridade do time, OpenAPI automático pelos schemas marshmallow, Blueprints | **aceito** |
 | 003 | Frontend: Streamlit com tema, consumindo a API | **aceito (11/11)** |
 | 004 | **Classificação com LLM aberto (Qwen3-8B) numa EC2 só com CPU**, pré-calculada e versionada; validação com amostra manual (§12.1). Bedrock avaliado e descartado: a conta nova tem cota 0 em todos os modelos | **aceito (12/11)** |
 | 005 | Pré-cálculo na carga, sem cache externo | **não vira ADR.** Decisão registrada na §6.4 |
 | 006 | **Arquitetura AWS em 6 serviços: S3, Glue Python Shell, RDS, ECS Fargate, CloudWatch, Parameter Store** (vs. Glue Spark, Step Functions, EventBridge, ElastiCache, CloudFront) | **aceito (13/11)** |
-| 007 | Privacidade: o que o dashboard mostra e nunca mostra; k-anonimato | a escrever (D5), meia página |
+| 007 | Privacidade: o que o dashboard mostra e nunca mostra; k-anonimato | a escrever (15/11), meia página |
 | 008 | Método estatístico: logística + efeito marginal + IPW | **não vira ADR.** Decisão registrada em `docs/METODOLOGIA.md` |
 | 010 | **Motor de análise/ETL local: DuckDB** (vs. pandas puro, Polars, Spark, carregar tudo no Postgres, **Polars + Postgres + dbt**) — lê parquet direto, processa fora da memória, SQL reaproveitável; dbt avaliado e adiado por risco de prazo (texto completo abaixo) | **aceito** |
 
@@ -509,18 +511,7 @@ horas; a investigação do incidente.
 
 ---
 
-## 15. Dúvidas (prazo: quarta 11/11)
-
-**O prazo venceu em 11/11.** O rascunho está em `docs/DUVIDAS.md`, com a premissa de cada item. Sem resposta, cada premissa vale e fica registrada no BDR correspondente.
-
-1. Para rodar localmente, podemos entregar a classificação por LLM pré-calculada no repositório, ou o `docker compose up` deve chamar o LLM?
-2. Há preferência de stack para o frontend ou é livre?
-3. O filtro `country = 'Brazil'` vale por conversa, ou devemos considerar o usuário brasileiro se a maioria das conversas dele for do Brasil?
-4. Podemos versionar no repositório um recorte da base bruta (só Brasil), para a carga rodar sem baixar a base inteira?
-
----
-
-## 16. Preparação da apresentação (depois da entrega)
+## 15. Preparação da apresentação (depois da entrega)
 - 20 min: problema → definições (e sensibilidade) → 3 achados com decisões → dashboard ao vivo → incidente → o que faria diferente.
 - Em "o que faria diferente": citar a migração das definições para dbt (ADR-010) quando o projeto crescer.
 - Ensaiar a defesa de: definição de usuário, retorno, método de confusão, por que Postgres/Flask-smorest/DuckDB/frontend, custo da classificação, validação do LLM, o que a análise **não** prova.

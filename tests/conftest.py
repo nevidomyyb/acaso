@@ -55,6 +55,11 @@ class BaseSintetica:
         pais: str = "Brazil",
         texto: str = "oi",
         lang: str = "pt-BR",
+        modelo: str = "gpt-3.5-turbo-0613",
+        idioma: str = "Portuguese",
+        estado: str | None = "São Paulo",
+        redacted: bool = False,
+        resposta: str = "resp",
     ) -> None:
         """Conversa de 2 turnos: o 1º horário é `T0 + inicio`, o último `+ duracao_min`."""
         t1 = T0 + inicio
@@ -63,21 +68,21 @@ class BaseSintetica:
         self._id += 4
         turnos = [
             {"content": texto, "country": pais, "role": "user", "timestamp": None, "turn_identifier": ids[0]},
-            {"content": "resp", "country": None, "role": "assistant", "timestamp": t1, "turn_identifier": ids[1]},
+            {"content": resposta, "country": None, "role": "assistant", "timestamp": t1, "turn_identifier": ids[1]},
             {"content": texto, "country": pais, "role": "user", "timestamp": None, "turn_identifier": ids[2]},
-            {"content": "resp", "country": None, "role": "assistant", "timestamp": t2, "turn_identifier": ids[3]},
+            {"content": resposta, "country": None, "role": "assistant", "timestamp": t2, "turn_identifier": ids[3]},
         ]
         self.linhas.append(
             {
                 "conversation_hash": "h",
-                "model": "gpt-3.5-turbo-0613",
+                "model": modelo,
                 "timestamp": t2,
                 "conversation": turnos,
                 "turn": 2,
-                "language": "Portuguese",
+                "language": idioma,
                 "toxic": False,
-                "redacted": False,
-                "state": "São Paulo",
+                "redacted": redacted,
+                "state": estado,
                 "country": pais,
                 "hashed_ip": ip,
                 "header": {"accept-language": lang, "user-agent": ua},
