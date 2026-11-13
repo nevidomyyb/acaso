@@ -10,8 +10,9 @@ __pycache__/
 .env
 *.pem
 
-# Base bruta completa (3,36 GB) — baixada por etl/download.py
-data/raw/wildchat-1m/
+# Base bruta (3,36 GB) e recorte Brasil: o docker compose baixa e gera do zero (etl/download.py,
+# etl/recorte_brasil.py). Só a classificação (data/enriched/) vai para o git: refazê-la exige a EC2.
+data/raw/
 *.part
 
 # Artefatos locais
