@@ -39,7 +39,7 @@
 - [ ] A carga **popula a base analítica a partir da base bruta**.
 - [ ] O dashboard **nunca lê a base bruta** — só a base analítica.
 - [ ] **Pelo menos 2 telas com dados reais**.
-- [ ] Análise somente sobre `country = 'Brazil'` (premissa registrada sobre como aplicar o filtro).
+- [x] Análise somente sobre `country = 'Brazil'` (premissa registrada sobre como aplicar o filtro).
 - [ ] **Toda infra e custo do dashboard na AWS**, inclusive o LLM se usado. Para a entrega roda local; **descrever a implantação**.
 - [ ] Declarar **o que o dashboard mostra e o que nunca mostra** (dados pessoais).
 - [ ] Repositório com instruções + **ADRs e BDRs** (contexto, opções, escolha).
@@ -475,8 +475,8 @@ A conta tem US$ 146,34 em créditos AWS, com validade até 19/12/2026. O custo d
 |---|---|---|---|---|
 | **Ter 10/11** ✅ | Setup + dados | Repo e estrutura; download da WildChat-1M com SHA-256; recorte Brasil com DuckDB; contagens iniciais (N real → custo da classificação); ADR-002, 004 e 010; dúvidas rascunhadas | Parquet BR + primeiros números | 2 |
 | **Qua 11/11** ✅ | Discovery | Qualidade dos dados (§5.1); `etl/definicoes.py` + 10 testes; sensibilidade (§4); BDR-001 a 008; ADR-003; IAM e classificador prontos | `01_discovery`, `03_definicoes`, ADR/BDR | 3 |
-| **Qui 12/11** | Features + EDA | Classificação das 3.361 conversas da 1ª sessão na EC2 (ADR-004) e validação manual (BDR-009, BDR-010); tabela `primeira_experiencia`; EDA (§5.2) | `temas_v2_qwen3_8b.parquet`, `primeira_experiencia`, `02_eda` | 3 |
-| **Sex 13/11** | Features + análise | `primeira_experiencia.py`; EDA (§5.2); regressão com IC; bruto × ajustado; GPT-4 no mesmo mês; semana atípica (perfil × taxa); 3 achados. Escopo cortado e `ARQUITETURA.md` escritos | `primeira_experiencia`, `02_eda`, `04_efeitos` | 4 |
+| **Qui 12/11** ✅ | Features + EDA | Classificação das 3.361 conversas da 1ª sessão na EC2 (ADR-004) e validação manual (BDR-009, BDR-010); tabela `primeira_experiencia`; EDA (§5.2) | `temas_v2_qwen3_8b.parquet`, `primeira_experiencia`, `02_eda` | 3 |
+| **Sex 13/11** ✅ | Features + análise | `primeira_experiencia.py`; EDA (§5.2); regressão com IC; bruto × ajustado; GPT-4 no mesmo mês; semana atípica (perfil × taxa); 3 achados (candidatos no notebook 04; versão final no `RELATORIO.md`, 15/11). Escopo cortado e `ARQUITETURA.md` escritos | `primeira_experiencia`, `02_eda`, `04_efeitos` | 4 |
 | **Sáb 14/11** | Construção | Migrations + carga idempotente + pré-cálculos; Flask-smorest + 4 endpoints; **2 telas**; `docker compose up` do zero | Dashboard funcionando com dados reais | 5 |
 | **Dom 15/11** | Sustentação + docs | Incidente §4.2 com teste de regressão; `INCIDENTE.md` (inclui o que registrar em cada camada); ADR-001 e ADR-007; indicadores no METODOLOGIA §11; `RELATORIO.md` | `docs/` completo + testes passando | 3 |
 | **Seg 16/11** | Revisão + envio | Clonar em pasta limpa e rodar `docker compose up`; revisar o `RELATORIO.md` (curto!); fechar parágrafo de IA + horas; **enviar até ~20h** | E-mail enviado | 1–2 |
@@ -523,11 +523,11 @@ horas; a investigação do incidente.
 ## Definition of Done (checklist final)
 - [ ] `git clone` + `docker compose up` em pasta limpa → telas com dados reais
 - [ ] ≥2 telas; cada número com definição, fonte e IC; aviso de amostra pequena
-- [ ] Efeitos ordenados com IC; bruto × ajustado; o que prova / não prova
-- [ ] Semana atípica com decomposição perfil × taxa
+- [x] Efeitos ordenados com IC; bruto × ajustado; o que prova / não prova
+- [x] Semana atípica com decomposição perfil × taxa
 - [ ] 3 achados → 3 decisões
-- [ ] Qualidade de dados: problemas + tratamentos
-- [ ] Sensibilidade das definições
+- [x] Qualidade de dados: problemas + tratamentos
+- [x] Sensibilidade das definições
 - [ ] Indicadores documentados com SQL
 - [ ] Arquitetura com diagrama, AWS, endpoints, cache, outros países
 - [ ] Privacidade: mostra × nunca mostra

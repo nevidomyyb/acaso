@@ -76,7 +76,7 @@ Use em **todo documento** do projeto (ADR, BDR, README, docs/, relatório, e-mai
 - Máquina: 15 GB RAM (≈ 6 GB livres), 12 núcleos. DuckDB com `memory_limit` explícito e `SET TimeZone='UTC'`.
 - **Segredos:** `.env` (gitignored, `chmod 600`) tem `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION` (preenchidos em 11/11) e `ACASO_S3_BUCKET` (preenchidos em 11/11). O `ACASO_BEDROCK_ROLE_ARN` ficou no arquivo, sem uso. Modelo em `.env.example`. No compose, use `env_file: [{path: .env, required: false}]` para subir sem o arquivo. Nunca leia nem imprima os valores do `.env` (para checar, mascare: `awk -F= ...`).
 - **AWS:** políticas IAM de menor privilégio em `infra/aws/iam/` (usuário `acaso-etl`, só S3; bucket `acaso-desafio-tecnico`) e em `infra/aws/ec2/` (role da instância: SSM + prefixo `cpu/*` do bucket). Não crie recursos AWS (Budgets, S3, EC2) sem confirmação explícita da pessoa.
-- Commits só quando a pessoa pedir. **Tudo direto na `main`, sem branches** (nem por dia, nem por tarefa; decisão da pessoa em 13/11).
+- Commits e push só quando a pessoa pedir (remoto `origin` = GitHub). Ao concluir um dia, marque ✅ no cronograma do PROJECT.md (§13) e os itens prontos do checklist final. **Tudo direto na `main`, sem branches** (nem por dia, nem por tarefa; decisão da pessoa em 13/11).
 
 ## Fatos dos dados (manter atualizado)
 **Fonte**
