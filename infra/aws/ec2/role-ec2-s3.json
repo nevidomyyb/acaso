@@ -5,14 +5,23 @@
       "Sid": "ListarPrefixoCpu",
       "Effect": "Allow",
       "Action": "s3:ListBucket",
-      "Resource": "arn:aws:s3:::<BUCKET>",
-      "Condition": { "StringLike": { "s3:prefix": ["cpu/*"] } }
+      "Resource": "arn:aws:s3:::acaso-desafio-tecnico",
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": [
+            "cpu/*"
+          ]
+        }
+      }
     },
     {
       "Sid": "LerGravarPrefixoCpu",
       "Effect": "Allow",
-      "Action": ["s3:GetObject", "s3:PutObject"],
-      "Resource": "arn:aws:s3:::<BUCKET>/cpu/*"
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject"
+      ],
+      "Resource": "arn:aws:s3:::acaso-desafio-tecnico/cpu/*"
     }
   ]
 }

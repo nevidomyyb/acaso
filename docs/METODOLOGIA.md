@@ -678,30 +678,61 @@ usa 7×24h absolutas, então horário de verão e fuso não a distorcem.
 
 ## 11. Os indicadores do dashboard
 
-Esta seção substitui o `INDICADORES.md` previsto no plano (corte de 13/11, `PROJECT.md` §14). Cada indicador do
-dashboard tem definição, numerador, denominador e regra de amostra mínima. Todos nascem das mesmas definições
-dos BDRs, pelo mesmo módulo `etl/definicoes.py` que a análise usa.
+Esta seção substitui o `INDICADORES.md` previsto no plano (corte de 13/11, `PROJECT.md` §14). Cada indicador tem
+definição, numerador, denominador, período, SQL e regra de amostra mínima. Todos nascem das definições dos BDRs,
+pelo mesmo `etl/definicoes.py` que a análise usa. A carga grava a `primeira_experiencia` (1 linha por usuário) e a
+`resultado_efeitos`; o SQL dos indicadores fica no banco, em migrations do Alembic
+([../db/migrations/versions/0002_indicadores.py](../db/migrations/versions/0002_indicadores.py)).
 
-| Indicador | Definição | Numerador ÷ denominador | Período | Fonte |
-|---|---|---|---|---|
-| **Novos usuários** | Pessoas cuja 1ª sessão começou no período | contagem de `usuario_id` elegíveis | mês (semana como detalhe) | `agg_coorte` |
-| **Taxa de retorno em 7 dias** | Quem abriu nova sessão até 7×24h do início da 1ª | `voltou_7d` ÷ elegíveis da coorte | mês (semana como detalhe) | `agg_coorte` |
-| **Efeito ajustado de um fator** | Diferença de retorno, em p.p., entre dois níveis do fator, com os outros fatores mantidos | coeficiente da regressão linear, com IC robusto | base inteira | `resultado_efeitos` |
-| **% de 1ª conversa com recusa** | Quem levou recusa total na 1ª conversa da estreia (BDR-010) | com recusa total ÷ elegíveis | mês | `primeira_experiencia` |
-| **Mix de temas na estreia** | Distribuição dos 7 grupos de tema na 1ª conversa (BDR-009) | por grupo ÷ elegíveis | mês | `primeira_experiencia` |
+| Indicador | Definição | Numerador ÷ denominador | Período | Objeto no banco | Endpoint |
+|---|---|---|---|---|---|
+| **Novatos** | Pessoas cuja 1ª sessão começou no período | contagem de elegíveis | mês, semana ou filtro livre | `vw_retorno_coorte` | `/api/kpis`, `/api/retencao/coortes` |
+| **Retorno em 7 dias** | Nova sessão até 7×24 h do início da 1ª | `voltou_7d` ÷ elegíveis | idem | `vw_retorno_coorte`, `vw_novato_dimensao` | idem |
+| **Retorno por nível** | O mesmo, aberto por tema, modelo, dispositivo, idioma, horário, resposta, recusa ou estado | `voltou_7d` ÷ elegíveis do nível | coorte ou período | `vw_novato_dimensao` | `/api/retencao/coortes?dimensao=` |
+| **% com recusa total na estreia** | Recusa total na 1ª conversa (BDR-010) | com recusa ÷ elegíveis | filtro livre | `primeira_experiencia` | `/api/kpis` |
+| **Efeito de um fator** | Diferença de retorno em p.p. contra a referência; bruto ou ajustado | coeficiente da regressão linear, IC robusto (HC1) | base inteira | `resultado_efeitos` | `/api/fatores/efeitos` |
+
+**O SQL** (resumido; o texto completo está na migration e em
+[../backend/api/consultas.py](../backend/api/consultas.py)):
+
+```sql
+-- IC 95% de Wilson, igual a etl/estatistica.py (teste: tests/test_api.py)
+wilson_inf(s, n) = greatest(0, (p + z²/2n − z·sqrt(p(1−p)/n + z²/4n²)) / (1 + z²/n)),  p = s/n, z = 1,96
+amostra_suficiente(s, n) = (wilson_sup − wilson_inf) / 2 <= 0.10
+k_minimo() = 20
+
+-- Retorno por coorte (mês e semana, fuso de São Paulo)
+CREATE VIEW vw_retorno_coorte AS
+SELECT pais, granularidade, coorte, count(*) AS novos, count(*) FILTER (WHERE voltou_7d) AS voltaram,
+       voltaram / novos AS taxa, wilson_inf(...), wilson_sup(...), amostra_suficiente(...)
+FROM primeira_experiencia WHERE elegivel           -- coorte = coorte_mes ou coorte_semana
+GROUP BY 1, 2, 3;
+
+-- Uma linha por novato elegível e por dimensão; a API filtra o período e soma por nível
+CREATE VIEW vw_novato_dimensao AS
+SELECT p.pais, p.usuario_sk, p.primeira_dia_local, p.coorte_semana, p.coorte_mes, p.voltou_7d,
+       d.dimensao, coalesce(d.nivel, 'sem_valor') AS nivel
+FROM primeira_experiencia p
+CROSS JOIN LATERAL (VALUES ('geral', 'todos'), ('tema_grupo', tema_grupo), ('familia_modelo', familia_modelo),
+                           ...) AS d(dimensao, nivel)
+WHERE p.elegivel;
+```
 
 **Regras comuns a todos:**
 
-1. **Denominador = a coorte de novatos elegíveis.** `elegiveis()` tira 48 pessoas censuradas e 87 com falha de
-   coleta na janela. Ninguém conta como "não voltou" sem ter tido chance de voltar.
+1. **Denominador = a coorte de novatos elegíveis.** Saem 48 pessoas censuradas e 87 com falha de coleta na janela.
+   Ninguém conta como "não voltou" sem ter tido chance de voltar. A carga grava as rejeitadas por motivo em
+   `meta_carga.rejeitadas`.
 2. **Todo número com IC de Wilson** (§3), nunca a proporção sozinha.
-3. **Amostra mínima:** se o IC passar de ±10 p.p. (cerca de 80 pessoas), a tela mostra o número esmaecido, com o
-   aviso "amostra insuficiente". O número nunca é escondido sem aviso.
-4. **k-anonimato, k = 20:** um recorte com menos de 20 pessoas não aparece. O estado com poucos usuários entra
-   em "outros".
-5. **Cada resposta da API carrega `definicao_versao` e `fonte`.** Se uma definição mudar, o número muda de
-   versão junto, e o rodapé da tela mostra qual versão gerou o valor.
+3. **Amostra mínima:** se o IC passar de ±10 p.p. (cerca de 80 pessoas), a tela mostra o ponto vazado e o aviso
+   "amostra insuficiente". O número nunca some sem aviso.
+4. **k-anonimato, k = 20** (decisão de 14/11; não é exigência do enunciado): um nível de dimensão com menos de 20
+   novatos volta sem números, com `suprimido_k = true`, e a tela mostra o aviso. O total da coorte (sem atributo)
+   aparece mesmo com n < 20, esmaecido. O estado com poucos usuários já entra em "outros" na carga.
+5. **Cada resposta da API carrega `meta`:** `request_id`, `definicao_versao`, `carga_id`, `dados_ate` e `fonte`
+   (o objeto do banco). O rodapé de cada tela mostra esses campos.
 
-O SQL de cada indicador fica ao lado do seu endpoint, em `backend/`, e entra aqui no Dia 5. Os valores não são
-calculados no request: a carga grava `agg_coorte`, `resultado_efeitos` e `primeira_experiencia` já prontos
-(`PROJECT.md` §6.4).
+**Velocidade.** O pré-cálculo pesado (sessões, retorno, fatores e regressão) roda na carga, em ~1,5 s. A agregação
+roda no request, sobre ~2.354 linhas: a consulta mais pesada (semana × tema) leva ~15 ms na API, medida pelo log
+de cada requisição (`duracao_ms`). A meta é p95 < 500 ms. **Cache:** só na memória do processo do dashboard
+(`st.cache_data`, 5 min). Não há cache externo: nada na medição pede um.

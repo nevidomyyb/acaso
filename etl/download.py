@@ -4,7 +4,8 @@ Uso:
     python etl/download.py --dest data/raw/wildchat-1m
 
 - Lista os arquivos parquet via API do Hugging Face e confere o SHA-256 (LFS oid) de cada um.
-- Idempotente: arquivo já baixado com checksum correto é pulado.
+- Idempotente: arquivo já baixado com checksum correto é pulado. Se o manifesto local existe e todos os
+  arquivos conferem, nem a API é consultada.
 - Grava um manifesto (manifest.json) com revisão do dataset, arquivos, tamanhos e checksums,
   que entra na rastreabilidade da carga (meta_carga).
 """
@@ -57,11 +58,31 @@ def download(url: str, dest: Path, expected_size: int) -> None:
     print(f"  baixado {dest.name} ({done / 1e6:.0f} MB em {time.time() - t0:.0f}s)", flush=True)
 
 
+def conferido_localmente(dest: Path) -> bool:
+    """True se o manifesto existe e cada arquivo dele está no disco com tamanho e SHA-256 corretos.
+
+    Assim o `docker compose up` com a base já baixada não depende da rede nem da API do Hugging Face.
+    """
+    manifesto = dest / "manifest.json"
+    if not manifesto.exists():
+        return False
+    m = json.loads(manifesto.read_text())
+    for f in m.get("files", []):
+        p = dest / f["name"]
+        if not p.exists() or p.stat().st_size != f["size"] or sha256_of(p) != f["sha256"]:
+            print(f"  diferente do manifesto: {f['name']}", flush=True)
+            return False
+    print(f"{m['dataset']} @ {m['revision']}: {len(m['files'])} arquivos conferidos pelo manifesto (sem rede)")
+    return bool(m.get("files"))
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--dest", default="data/raw/wildchat-1m", type=Path)
     args = ap.parse_args()
     args.dest.mkdir(parents=True, exist_ok=True)
+    if conferido_localmente(args.dest):
+        return 0
 
     info = _get_json(API_INFO)
     rev = info["sha"]

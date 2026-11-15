@@ -254,7 +254,7 @@ documentos ainda tratavam o Bedrock como caminho principal. Esta rodada removeu 
 |---|---|
 | `.env.example` | `ACASO_BEDROCK_ROLE_ARN` saiu. Ficaram as credenciais e `ACASO_S3_BUCKET` |
 | `requirements-analysis.txt` | **Sem mudança.** O `boto3` continua, porque o S3 é o canal entre a máquina local e a EC2 |
-| `infra/aws/iam/usuario-acaso-etl.json` | De 5 blocos para 2: só `s3:ListBucket`, `GetObject` e `PutObject` |
+| `infra/aws/iam/usuario-acaso-etl.json` | De 5 blocos para 2: só `s3:ListBucket`, `GetObject` e `PutObject`. Em 14/11, o arquivo deu lugar a `usuario-acaso-operador.json` + `limite-acaso.json` |
 | `infra/aws/iam/role-bedrock-batch-*.json` | **Apagados** (2 arquivos) |
 | `infra/aws/iam/README.md` | Reescrito: usuário de S3 e role da instância. Saíram o procedimento de 1º acesso ao Bedrock e o texto do caso no Support |
 | `infra/aws/ec2/*` | Só o número do ADR |

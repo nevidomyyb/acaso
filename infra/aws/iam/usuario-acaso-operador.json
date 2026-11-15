@@ -1,0 +1,233 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "Identidade",
+      "Effect": "Allow",
+      "Action": "sts:GetCallerIdentity",
+      "Resource": "*"
+    },
+    {
+      "Sid": "S3ListarBucket",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::<BUCKET>"
+    },
+    {
+      "Sid": "S3ObjetosDoBucket",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject"
+      ],
+      "Resource": "arn:aws:s3:::<BUCKET>/*"
+    },
+    {
+      "Sid": "Ec2Leitura",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:DescribeInstances",
+        "ec2:DescribeInstanceStatus",
+        "ec2:DescribeVpcs",
+        "ec2:DescribeSubnets",
+        "ec2:DescribeSecurityGroups",
+        "ec2:DescribeImages"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "us-east-1"
+        }
+      }
+    },
+    {
+      "Sid": "AmiPublicaDoUbuntu",
+      "Effect": "Allow",
+      "Action": "ssm:GetParameter",
+      "Resource": "arn:aws:ssm:us-east-1::parameter/aws/service/canonical/ubuntu/*"
+    },
+    {
+      "Sid": "CriarInstanciaSoDoTipoECTag",
+      "Effect": "Allow",
+      "Action": "ec2:RunInstances",
+      "Resource": "arn:aws:ec2:us-east-1:<CONTA>:instance/*",
+      "Condition": {
+        "StringEquals": {
+          "ec2:InstanceType": "c7i.4xlarge",
+          "aws:RequestTag/projeto": "acaso"
+        }
+      }
+    },
+    {
+      "Sid": "RecursosUsadosPelaInstancia",
+      "Effect": "Allow",
+      "Action": "ec2:RunInstances",
+      "Resource": [
+        "arn:aws:ec2:us-east-1::image/*",
+        "arn:aws:ec2:us-east-1:<CONTA>:subnet/*",
+        "arn:aws:ec2:us-east-1:<CONTA>:network-interface/*",
+        "arn:aws:ec2:us-east-1:<CONTA>:volume/*",
+        "arn:aws:ec2:us-east-1:<CONTA>:security-group/*"
+      ]
+    },
+    {
+      "Sid": "CriarSecurityGroupComTag",
+      "Effect": "Allow",
+      "Action": "ec2:CreateSecurityGroup",
+      "Resource": "arn:aws:ec2:us-east-1:<CONTA>:security-group/*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestTag/projeto": "acaso"
+        }
+      }
+    },
+    {
+      "Sid": "SecurityGroupNaVpc",
+      "Effect": "Allow",
+      "Action": "ec2:CreateSecurityGroup",
+      "Resource": "arn:aws:ec2:us-east-1:<CONTA>:vpc/*"
+    },
+    {
+      "Sid": "TagSoNaCriacao",
+      "Effect": "Allow",
+      "Action": "ec2:CreateTags",
+      "Resource": [
+        "arn:aws:ec2:us-east-1:<CONTA>:instance/*",
+        "arn:aws:ec2:us-east-1:<CONTA>:volume/*",
+        "arn:aws:ec2:us-east-1:<CONTA>:security-group/*"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "ec2:CreateAction": [
+            "RunInstances",
+            "CreateSecurityGroup"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "ApagarSoRecursoDoProjeto",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:TerminateInstances",
+        "ec2:DeleteSecurityGroup"
+      ],
+      "Resource": [
+        "arn:aws:ec2:us-east-1:<CONTA>:instance/*",
+        "arn:aws:ec2:us-east-1:<CONTA>:security-group/*"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/projeto": "acaso"
+        }
+      }
+    },
+    {
+      "Sid": "ComandoSsmSoNaInstanciaDoProjeto",
+      "Effect": "Allow",
+      "Action": "ssm:SendCommand",
+      "Resource": "arn:aws:ec2:us-east-1:<CONTA>:instance/*",
+      "Condition": {
+        "StringEquals": {
+          "ssm:resourceTag/projeto": "acaso"
+        }
+      }
+    },
+    {
+      "Sid": "ComandoSsmSoShell",
+      "Effect": "Allow",
+      "Action": "ssm:SendCommand",
+      "Resource": "arn:aws:ssm:us-east-1::document/AWS-RunShellScript"
+    },
+    {
+      "Sid": "ResultadoDoComandoSsm",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:GetCommandInvocation",
+        "ssm:ListCommandInvocations"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "RolesDoProjetoSoComLimite",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:PutRolePermissionsBoundary"
+      ],
+      "Resource": "arn:aws:iam::<CONTA>:role/acaso-*",
+      "Condition": {
+        "StringEquals": {
+          "iam:PermissionsBoundary": "arn:aws:iam::<CONTA>:policy/acaso-limite"
+        }
+      }
+    },
+    {
+      "Sid": "RolesDoProjetoManutencao",
+      "Effect": "Allow",
+      "Action": [
+        "iam:GetRole",
+        "iam:DeleteRole",
+        "iam:TagRole",
+        "iam:UntagRole",
+        "iam:ListAttachedRolePolicies",
+        "iam:ListRolePolicies",
+        "iam:ListInstanceProfilesForRole"
+      ],
+      "Resource": "arn:aws:iam::<CONTA>:role/acaso-*"
+    },
+    {
+      "Sid": "InstanceProfilesDoProjeto",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateInstanceProfile",
+        "iam:DeleteInstanceProfile",
+        "iam:GetInstanceProfile",
+        "iam:AddRoleToInstanceProfile",
+        "iam:RemoveRoleFromInstanceProfile",
+        "iam:TagInstanceProfile"
+      ],
+      "Resource": "arn:aws:iam::<CONTA>:instance-profile/acaso-*"
+    },
+    {
+      "Sid": "PassarRoleSoParaServicosDoProjeto",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::<CONTA>:role/acaso-*",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": [
+            "ec2.amazonaws.com",
+            "ecs-tasks.amazonaws.com",
+            "glue.amazonaws.com"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "NuncaAlterarAsPoliticasDoProjeto",
+      "Effect": "Deny",
+      "Action": [
+        "iam:CreatePolicyVersion",
+        "iam:DeletePolicy",
+        "iam:DeletePolicyVersion",
+        "iam:SetDefaultPolicyVersion"
+      ],
+      "Resource": [
+        "arn:aws:iam::<CONTA>:policy/acaso-limite",
+        "arn:aws:iam::<CONTA>:policy/acaso-operador"
+      ]
+    },
+    {
+      "Sid": "NuncaTirarOLimiteDeUmaRole",
+      "Effect": "Deny",
+      "Action": "iam:DeleteRolePermissionsBoundary",
+      "Resource": "*"
+    }
+  ]
+}

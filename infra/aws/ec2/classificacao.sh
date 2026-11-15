@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# EC2 de classificação em CPU (ADR-004). Usa o perfil padrão do AWS CLI (administrador), nunca o .env.
+# EC2 de classificação em CPU (ADR-004). Credenciais: as do usuário acaso-operador (infra/aws/iam/), pelo
+# ambiente (.env no compose) ou pelo perfil do AWS CLI. Toda role criada leva o limite acaso-limite.
 #
 #   classificacao.sh criar              role + instance profile + security group + instância
 #   classificacao.sh pronto             mostra se o llama-server subiu (fim do user-data)
@@ -25,9 +26,10 @@ TIPO=${TIPO:-c7i.4xlarge}
 ZONA=${ZONA:-us-east-1a}
 DIR=$(cd "$(dirname "$0")" && pwd)
 RAIZ=$(cd "$DIR/../../.." && pwd)
-BUCKET=$(grep -E '^ACASO_S3_BUCKET=' "$RAIZ/.env" | cut -d= -f2)
+BUCKET=${ACASO_S3_BUCKET:-$(grep -E '^ACASO_S3_BUCKET=' "$RAIZ/.env" 2>/dev/null | cut -d= -f2)}
+: "${BUCKET:?defina ACASO_S3_BUCKET}"
 export AWS_PAGER="" AWS_DEFAULT_REGION=us-east-1
-unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY  # garante o perfil administrador
+LIMITE=acaso-limite  # permissions boundary obrigatório (política do acaso-operador)
 
 instancia() {
   aws ec2 describe-instances --filters "Name=tag:Name,Values=$NOME" \
@@ -66,13 +68,15 @@ curl -s http://127.0.0.1:8080/health; echo; grep -o 'modelos/[^ ]*' /etc/systemd
 
 criar() {
   if ! aws iam get-role --role-name "$NOME" >/dev/null 2>&1; then
+    local conta
+    conta=$(aws sts get-caller-identity --query Account --output text)
     aws iam create-role --role-name "$NOME" --assume-role-policy-document "file://$DIR/role-ec2-confianca.json" \
-      --tags Key=projeto,Value=acaso >/dev/null
+      --permissions-boundary "arn:aws:iam::$conta:policy/$LIMITE" --tags Key=projeto,Value=acaso >/dev/null
     aws iam attach-role-policy --role-name "$NOME" \
       --policy-arn arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
     aws iam put-role-policy --role-name "$NOME" --policy-name s3-prefixo-cpu \
       --policy-document "$(sed "s/<BUCKET>/$BUCKET/g" "$DIR/role-ec2-s3.json")"
-    aws iam create-instance-profile --instance-profile-name "$NOME" >/dev/null
+    aws iam create-instance-profile --instance-profile-name "$NOME" --tags Key=projeto,Value=acaso >/dev/null
     aws iam add-role-to-instance-profile --instance-profile-name "$NOME" --role-name "$NOME"
     sleep 15  # propagação do instance profile
   fi
@@ -82,7 +86,9 @@ criar() {
     --query "SecurityGroups[0].GroupId" --output text)
   if [ "$sg" = "None" ]; then  # sem regra de entrada: o acesso é só por SSM
     sg=$(aws ec2 create-security-group --group-name "$NOME" --vpc-id "$vpc" \
-      --description "acaso: classificacao em CPU, sem entrada" --query GroupId --output text)
+      --description "acaso: classificacao em CPU, sem entrada" \
+      --tag-specifications "ResourceType=security-group,Tags=[{Key=Name,Value=$NOME},{Key=projeto,Value=acaso}]" \
+      --query GroupId --output text)
   fi
   subnet=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$vpc" "Name=availability-zone,Values=$ZONA" \
     "Name=default-for-az,Values=true" --query "Subnets[0].SubnetId" --output text)
@@ -94,6 +100,7 @@ criar() {
     --metadata-options HttpTokens=required \
     --block-device-mappings 'DeviceName=/dev/sda1,Ebs={VolumeSize=40,VolumeType=gp3,DeleteOnTermination=true}' \
     --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$NOME},{Key=projeto,Value=acaso}]" \
+      "ResourceType=volume,Tags=[{Key=projeto,Value=acaso}]" \
     --query "Instances[0].[InstanceId,InstanceType,Placement.AvailabilityZone]" --output text
 }
 

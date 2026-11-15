@@ -1,0 +1,105 @@
+# Sobe tudo do zero: base bruta → classificação → carga → Postgres → API → dashboard.
+#   docker compose up        (nesta máquina de desenvolvimento: docker-compose up)
+# Sem .env e sem credenciais AWS: a classificação já vem pronta em data/enriched/ (ADR-004).
+# ./data é um volume: base já baixada (SHA-256 conferido) não é baixada de novo.
+
+name: acaso
+
+x-etl: &etl
+  build:
+    context: .
+    dockerfile: etl/Dockerfile
+  image: acaso-etl:local
+  volumes:
+    - ./data:/app/data
+
+x-db-escrita: &db-escrita
+  ACASO_DB_URL: postgresql://acaso:${ACASO_DB_SENHA:-acaso_local}@postgres:5432/acaso
+  ACASO_DB_SENHA_LEITURA: ${ACASO_DB_SENHA_LEITURA:-acaso_leitura_local}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: acaso
+      POSTGRES_USER: acaso
+      POSTGRES_PASSWORD: ${ACASO_DB_SENHA:-acaso_local}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5433:5432"  # só na máquina local, para inspeção
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U acaso -d acaso"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # 1. Base bruta: baixa a WildChat-1M (3,36 GB, SHA-256) e gera o recorte Brasil. Pula o que já confere.
+  bruta:
+    <<: *etl
+    command: >
+      sh -c "python etl/download.py --dest data/raw/wildchat-1m &&
+             python etl/recorte_brasil.py --se-necessario --memory-limit 1500MB"
+
+  # 2. Classificação de tema e recusa (ADR-004). Com o arquivo em data/enriched/, só confere e sai.
+  #    Sem o arquivo: cria a EC2, classifica (~6 h, ~US$ 5) e destrói, com as credenciais do .env.
+  classificacao:
+    <<: *etl
+    command: ["bash", "etl/etapa_classificacao.sh"]
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      bruta:
+        condition: service_completed_successfully
+
+  # 3. Carga: migrations + base analítica a partir da base bruta. Só lê ./data.
+  carga:
+    <<: *etl
+    command: ["python", "etl/carga.py"]
+    environment:
+      <<: *db-escrita
+      ACASO_DUCKDB_MEMORIA: 1GB
+    volumes:
+      - ./data:/app/data:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      classificacao:
+        condition: service_completed_successfully
+
+  # 4. API: lê só a base analítica, com um papel só de leitura.
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: acaso-api:local
+    environment:
+      ACASO_DB_URL: postgresql://acaso_leitura:${ACASO_DB_SENHA_LEITURA:-acaso_leitura_local}@postgres:5432/acaso
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    depends_on:
+      carga:
+        condition: service_completed_successfully
+
+  # 5. Dashboard: só fala com a API.
+  dashboard:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    image: acaso-dashboard:local
+    environment:
+      API_URL: http://api:8000
+    ports:
+      - "8501:8501"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  pgdata:

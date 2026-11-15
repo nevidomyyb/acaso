@@ -1,0 +1,12 @@
+# O contexto de build é a raiz do repo. A base de dados entra por volume (./data), nunca na imagem.
+.git
+.venv
+.env
+data
+analysis
+docs
+tests
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+*.ipynb

@@ -35,10 +35,10 @@
 
 ## 2. Restrições obrigatórias (checklist de "eliminação")
 
-- [ ] `docker compose up` sobe **tudo do zero** (base analítica + carga + backend + frontend).
-- [ ] A carga **popula a base analítica a partir da base bruta**.
-- [ ] O dashboard **nunca lê a base bruta** — só a base analítica.
-- [ ] **Pelo menos 2 telas com dados reais**.
+- [x] `docker compose up` sobe **tudo do zero** (base analítica + carga + backend + frontend).
+- [x] A carga **popula a base analítica a partir da base bruta**.
+- [x] O dashboard **nunca lê a base bruta** — só a base analítica.
+- [x] **Pelo menos 2 telas com dados reais**.
 - [x] Análise somente sobre `country = 'Brazil'` (premissa registrada sobre como aplicar o filtro).
 - [ ] **Toda infra e custo do dashboard na AWS**, inclusive o LLM se usado. Para a entrega roda local; **descrever a implantação**.
 - [ ] Declarar **o que o dashboard mostra e o que nunca mostra** (dados pessoais).
@@ -67,7 +67,7 @@
 
 ### 3.2 Estrutura do repositório
 
-Estado em 13/11. A data entre parênteses = dia previsto no cronograma (§13) para o que ainda não existe.
+Estado em 14/11. A data entre parênteses = dia previsto no cronograma (§13) para o que ainda não existe.
 
 ```
 acaso/
@@ -77,8 +77,9 @@ acaso/
 ├── requirements-analysis.txt   # dependências da análise, com versão fixada
 ├── ruff.toml · pytest.ini      # lint (linha de 120) e testes
 ├── .env.example                # modelo do .env: credenciais AWS e bucket do projeto
-├── docker-compose.yml          # (14/11) Postgres + download + carga + API + dashboard, do zero;
+├── docker-compose.yml          # bruta → classificacao → carga → postgres ← api ← dashboard, do zero;
 │                               #   monta ./data como volume: base já baixada (SHA-256 ok) não baixa de novo
+├── .dockerignore               # a base entra por volume, nunca na imagem
 │
 ├── data/
 │   ├── raw/                    # FORA do git: o compose baixa e gera do zero
@@ -105,7 +106,10 @@ acaso/
 │   │   └── classificacao_v2.md # v1 + 2 regras de desempate e 3 casos de `recusa = nao`
 │   ├── efeitos.py              # regressão: bruto × ajustado em p.p., com IC; taxa esperada pelo perfil; gera `resultado_efeitos`
 │   ├── primeira_experiencia.py # fatores da 1ª experiência, 1 linha por usuário (conteúdo da 1ª conversa, volume da 1ª sessão)
-│   └── carga.py                # (14/11) popula o Postgres a partir da base bruta (idempotente)
+│   ├── carga.py                # migrations + base analítica a partir da bruta; TRUNCATE + COPY numa transação
+│   ├── conferir_classificacao.py # confere colunas e taxonomia do arquivo de tema e recusa
+│   ├── etapa_classificacao.sh  # serviço `classificacao`: confere o arquivo ou refaz na EC2 (e destrói sempre)
+│   └── Dockerfile · requirements.txt  # imagem dos serviços bruta, classificacao e carga
 │
 ├── analysis/                   # fonte em .py (jupytext, formato percent); o .ipynb é gerado
 │   ├── estilo.py               # paleta dos gráficos e rodapé com a fonte de cada número
@@ -122,14 +126,18 @@ acaso/
 │   ├── test_efeitos.py         # ajustado = bruto sem outro fator; ajuste desfaz confusão conhecida; taxa esperada
 │   ├── test_classificar_cpu.py # seleção, prompt, schema e leitura da saída do modelo
 │   ├── test_recusa_regex.py    # recusas e não recusas conhecidas
-│   └── test_validacao.py       # alocação estratificada e acurácia ponderada
+│   ├── test_validacao.py       # alocação estratificada e acurácia ponderada
+│   ├── test_carga.py           # conversões; carga real idempotente, sem dado pessoal, falha sem apagar (db)
+│   ├── test_api.py             # contrato, Wilson SQL = Python, k-anonimato, 422, snapshot do OpenAPI (db)
+│   ├── test_etapa_classificacao.py # fluxo da EC2 com comandos falsos: destrói mesmo se falhar
+│   └── banco.py · snapshots/   # banco temporário dos testes `db`; contrato OpenAPI aprovado
 │
-├── infra/aws/iam/              # políticas de menor privilégio (S3)
+├── infra/aws/iam/              # usuário acaso-operador + limite acaso-limite para as roles que ele cria
 ├── infra/aws/ec2/              # cria, acompanha e destrói a EC2 de classificação (acesso só por SSM)
 │
-├── db/                         # (14/11) migrations do schema + SQL de cada indicador
-├── backend/                    # (14/11) Flask + flask-smorest: 4 endpoints, schemas, observabilidade
-├── frontend/                   # (14/11) Streamlit com tema próprio, 2 telas, lendo só a API
+├── db/                         # Alembic: 0001 = 3 tabelas + papel só de leitura; 0002 = Wilson, k e views
+├── backend/                    # Flask + flask-smorest: 4 endpoints, schemas, request_id e log JSON, gunicorn
+├── frontend/                   # Streamlit com tema próprio, 2 telas em Altair, lendo só a API
 │
 └── docs/
     ├── desafio/enunciado.txt   # texto do enunciado, para busca
@@ -145,17 +153,17 @@ acaso/
     └── INCIDENTE.md            # (15/11) resposta da §4.2 + o que registrar em cada camada
 ```
 
-### 3.3 Modelo da base analítica (rascunho)
+### 3.3 Modelo da base analítica (decidido em 14/11)
 
-- `dim_usuario` — `usuario_id`, `definicao_versao`, `primeira_vez_utc`, `estado_agrupado` (menos de 20 usuários → "outros"), `idioma_3_niveis` (PT, EN, outro), `dispositivo` (mobile ou desktop, derivado do UA).
-- `fato_conversa` — `conversa_id`, `usuario_id`, `inicio_utc`, `fim_utc`, `modelo`, `turnos`, `idioma`, `tema`, `recusa`, `tam_resposta_media`, `redacted`, `sessao_id`. Sem `toxic`: a base pública removeu as conversas tóxicas, e o campo é 0 em todo o Brasil.
-- `fato_sessao` — `sessao_id`, `usuario_id`, `inicio`, `fim`, `n_conversas`.
-- `primeira_experiencia` — 1 linha por usuário com **todas as features** da 1ª sessão + `voltou_7d` + `observavel_7d` (censura).
-- `agg_coorte` — pré-calculada (granularidade `mes` ou `semana`, perfil, novos, voltaram, taxa, IC, `amostra_suficiente`). A visão principal é **mensal**, porque o IC semanal é de ±15 p.p. (decisão de 11/11).
-- `resultado_efeitos` — fator, nível, efeito, IC inferior/superior, método, n, versão do modelo.
-- `meta_carga` — execução, linhas lidas/gravadas/rejeitadas, checksum, duração, versão das definições.
+**4 tabelas**, criadas por migrations do Alembic (`db/migrations/`):
+- `primeira_experiencia` — 1 linha por usuário, com `usuario_sk` (inteiro substituto, sem mapeamento guardado), `pais`, coortes, `elegivel`, `voltou_7d` e os fatores da 1ª experiência. Sem `toxic`: a base pública removeu as conversas tóxicas, e o campo é 0 em todo o Brasil.
+- `resultado_efeitos` — fator, nível, referência, n, bruto e ajustado em p.p. com IC, método, versões.
+- `meta_carga` — execução, linhas lidas/gravadas/rejeitadas por motivo, SHA-256 da bruta e da classificação, duração, versão das definições.
+- `alembic_version` — migration aplicada (do Alembic).
 
-**Nada de texto das conversas, `hashed_ip` ou user-agent completo na base que o dashboard lê.** Todo recorte exibido respeita k-anonimato, com k = 20.
+**Views SQL** = o SQL de cada indicador (`vw_retorno_coorte`, `vw_retorno_dimensao`) + a função `wilson()`. A agregação roda na hora da requisição: a tabela tem ~2.354 linhas, e os filtros ficam livres. A visão principal é **mensal**, porque o IC semanal é de ±15 p.p. (decisão de 11/11).
+
+**Nada de texto das conversas, `hashed_ip` ou user-agent completo na base que o dashboard lê.** Recorte por dimensão com menos de 20 usuários volta sem taxa, com aviso (k-anonimato, k = 20). O k-anonimato é escolha nossa, não requisito do enunciado: os filtros livres criam recortes de 1 ou 2 pessoas.
 
 ---
 
@@ -477,7 +485,7 @@ A conta tem US$ 146,34 em créditos AWS, com validade até 19/12/2026. O custo d
 | **Qua 11/11** ✅ | Discovery | Qualidade dos dados (§5.1); `etl/definicoes.py` + 10 testes; sensibilidade (§4); BDR-001 a 008; ADR-003; IAM e classificador prontos | `01_discovery`, `03_definicoes`, ADR/BDR | 3 |
 | **Qui 12/11** ✅ | Features + EDA | Classificação das 3.361 conversas da 1ª sessão na EC2 (ADR-004) e validação manual (BDR-009, BDR-010); tabela `primeira_experiencia`; EDA (§5.2) | `temas_v2_qwen3_8b.parquet`, `primeira_experiencia`, `02_eda` | 3 |
 | **Sex 13/11** ✅ | Features + análise | `primeira_experiencia.py`; EDA (§5.2); regressão com IC; bruto × ajustado; GPT-4 no mesmo mês; semana atípica (perfil × taxa); 3 achados (candidatos no notebook 04; versão final no `RELATORIO.md`, 15/11). Escopo cortado e `ARQUITETURA.md` escritos | `primeira_experiencia`, `02_eda`, `04_efeitos` | 4 |
-| **Sáb 14/11** | Construção | Migrations + carga idempotente + pré-cálculos; Flask-smorest + 4 endpoints; **2 telas**; `docker compose up` do zero | Dashboard funcionando com dados reais | 5 |
+| **Sáb 14/11** ✅ | Construção | Migrations + carga idempotente + pré-cálculos; Flask-smorest + 4 endpoints; **2 telas**; `docker compose up` do zero | Dashboard funcionando com dados reais | 5 |
 | **Dom 15/11** | Sustentação + docs | Incidente §4.2 com teste de regressão; `INCIDENTE.md` (inclui o que registrar em cada camada); ADR-001 e ADR-007; indicadores no METODOLOGIA §11; `RELATORIO.md` | `docs/` completo + testes passando | 3 |
 | **Seg 16/11** | Revisão + envio | Clonar em pasta limpa e rodar `docker compose up`; revisar o `RELATORIO.md` (curto!); fechar parágrafo de IA + horas; **enviar até ~20h** | E-mail enviado | 1–2 |
 
@@ -501,6 +509,11 @@ para o que o enunciado exige, mais um extra barato. **Nenhum requisito obrigató
 | `docs/INDICADORES.md` e `docs/MONITORAMENTO.md` | Uma seção no `METODOLOGIA.md` e uma no `INCIDENTE.md` | ~1 h |
 | ADR-005, ADR-008 e ADR-009 | As decisões ficam na §6.4 e no `METODOLOGIA.md`, citadas na tabela da §10 | ~1 h |
 | Notebook `05_semana_atipica` | Uma seção do `04_efeitos_e_confusao` | ~0,5 h |
+| (14/11) `agg_coorte`, `dim_usuario`, `fato_conversa`, `fato_sessao` | Views SQL sobre a `primeira_experiencia`. Nenhuma tela lê as 4 tabelas, e o incidente usa a base bruta | ~1 h |
+
+**Acréscimo em 14/11:** o serviço `classificacao` do compose refaz a classificação na EC2 se o arquivo de
+`data/enriched/` não existir (≈ 6 h, ≈ US$ 5, com o usuário `acaso-operador`). Com o arquivo no git, o compose
+continua sem precisar de credenciais.
 
 **O extra que fica:** a análise de sensibilidade das definições (§4), já pronta e com 14 execuções do pipeline.
 Ela responde à pergunta mais difícil da defesa ("e se você tivesse escolhido diferente?") e não custa mais nada.
@@ -521,14 +534,14 @@ horas; a investigação do incidente.
 ---
 
 ## Definition of Done (checklist final)
-- [ ] `git clone` + `docker compose up` em pasta limpa → telas com dados reais
-- [ ] ≥2 telas; cada número com definição, fonte e IC; aviso de amostra pequena
+- [x] `git clone` + `docker compose up` em pasta limpa → telas com dados reais (cópia limpa em 14/11; refazer com `git clone` no dia 16)
+- [x] ≥2 telas; cada número com definição, fonte e IC; aviso de amostra pequena
 - [x] Efeitos ordenados com IC; bruto × ajustado; o que prova / não prova
 - [x] Semana atípica com decomposição perfil × taxa
 - [ ] 3 achados → 3 decisões
 - [x] Qualidade de dados: problemas + tratamentos
 - [x] Sensibilidade das definições
-- [ ] Indicadores documentados com SQL
+- [x] Indicadores documentados com SQL (METODOLOGIA §11)
 - [ ] Arquitetura com diagrama, AWS, endpoints, cache, outros países
 - [ ] Privacidade: mostra × nunca mostra
 - [ ] Monitoramento, testes, caminho até produção

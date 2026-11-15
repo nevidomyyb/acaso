@@ -23,12 +23,31 @@ import duckdb
 FILTRO = "country = 'Brazil'"
 
 
+def recorte_em_dia(src: Path, out: Path) -> bool:
+    """True se o recorte, o volume diário e o manifesto existem, o tamanho confere e a revisão da fonte é a atual."""
+    man_out, man_src, volume = out.with_suffix(".manifest.json"), src / "manifest.json", out.with_name(
+        "wildchat_volume_diario.parquet")
+    if not (out.exists() and man_out.exists() and man_src.exists() and volume.exists()):
+        return False
+    m = json.loads(man_out.read_text())
+    fonte = json.loads(man_src.read_text())
+    ok = (m.get("tamanho_bytes") == out.stat().st_size and m.get("criterio") == FILTRO
+          and (m.get("fonte") or {}).get("revision") == fonte.get("revision"))
+    if ok:
+        print(f"recorte em dia ({m['conversas']} conversas, revisão {fonte['revision'][:7]}): nada a refazer")
+    return ok
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--src", default="data/raw/wildchat-1m", type=Path)
     ap.add_argument("--out", default="data/raw/wildchat_br.parquet", type=Path)
     ap.add_argument("--memory-limit", default="4GB")
+    ap.add_argument("--se-necessario", action="store_true",
+                    help="pula se o recorte já existe e veio da mesma revisão da base (uso no docker compose)")
     args = ap.parse_args()
+    if args.se_necessario and recorte_em_dia(args.src, args.out):
+        return 0
 
     src_glob = str(args.src / "*.parquet")
     t0 = time.time()

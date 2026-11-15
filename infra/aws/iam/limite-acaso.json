@@ -1,0 +1,93 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "S3DoProjeto",
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucket",
+        "s3:GetObject",
+        "s3:PutObject"
+      ],
+      "Resource": [
+        "arn:aws:s3:::<BUCKET>",
+        "arn:aws:s3:::<BUCKET>/*"
+      ]
+    },
+    {
+      "Sid": "AgenteSsmNaInstancia",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:UpdateInstanceInformation",
+        "ssm:ListInstanceAssociations",
+        "ssm:ListAssociations",
+        "ssm:DescribeAssociation",
+        "ssm:GetDocument",
+        "ssm:DescribeDocument",
+        "ssm:UpdateInstanceAssociationStatus",
+        "ssm:PutInventory",
+        "ssmmessages:*",
+        "ec2messages:*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ParametrosDoProjeto",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:GetParameter",
+        "ssm:GetParameters"
+      ],
+      "Resource": "arn:aws:ssm:us-east-1:<CONTA>:parameter/acaso/*"
+    },
+    {
+      "Sid": "LogsDoProjeto",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": "arn:aws:logs:us-east-1:<CONTA>:log-group:/acaso/*"
+    },
+    {
+      "Sid": "TokenDoEcr",
+      "Effect": "Allow",
+      "Action": "ecr:GetAuthorizationToken",
+      "Resource": "*"
+    },
+    {
+      "Sid": "ImagensDoProjeto",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:BatchGetImage",
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:BatchCheckLayerAvailability"
+      ],
+      "Resource": "arn:aws:ecr:us-east-1:<CONTA>:repository/acaso-*"
+    },
+    {
+      "Sid": "JobGlueDoProjeto",
+      "Effect": "Allow",
+      "Action": [
+        "glue:GetJob",
+        "glue:GetJobRun",
+        "glue:GetConnection"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "RedeDoGlueNaVpc",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:CreateNetworkInterface",
+        "ec2:DeleteNetworkInterface",
+        "ec2:DescribeNetworkInterfaces",
+        "ec2:DescribeSubnets",
+        "ec2:DescribeSecurityGroups",
+        "ec2:DescribeVpcs"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

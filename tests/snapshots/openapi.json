@@ -1,0 +1,632 @@
+{
+  "components": {
+    "responses": {
+      "DEFAULT_ERROR": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        },
+        "description": "Default error response"
+      },
+      "UNPROCESSABLE_CONTENT": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        },
+        "description": "Unprocessable Content"
+      }
+    },
+    "schemas": {
+      "Coortes": {
+        "additionalProperties": false,
+        "properties": {
+          "dimensao": {
+            "type": "string"
+          },
+          "granularidade": {
+            "type": "string"
+          },
+          "linhas": {
+            "items": {
+              "$ref": "#/components/schemas/LinhaCoorte"
+            },
+            "type": "array"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          },
+          "pais": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Efeito": {
+        "additionalProperties": false,
+        "properties": {
+          "efeito_pp": {
+            "description": "Diferença em p.p. contra a referência",
+            "nullable": true,
+            "type": "number"
+          },
+          "fator": {
+            "type": "string"
+          },
+          "ic_cruza_zero": {
+            "description": "IC inclui o zero: sem evidência",
+            "nullable": true,
+            "type": "boolean"
+          },
+          "ic_inf": {
+            "nullable": true,
+            "type": "number"
+          },
+          "ic_sup": {
+            "nullable": true,
+            "type": "number"
+          },
+          "n": {
+            "description": "Novatos neste nível",
+            "nullable": true,
+            "type": "integer"
+          },
+          "nivel": {
+            "type": "string"
+          },
+          "referencia": {
+            "type": "string"
+          },
+          "rotulo_fator": {
+            "type": "string"
+          },
+          "rotulo_nivel": {
+            "type": "string"
+          },
+          "rotulo_referencia": {
+            "type": "string"
+          },
+          "suprimido_k": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "Efeitos": {
+        "additionalProperties": false,
+        "properties": {
+          "ajuste": {
+            "type": "string"
+          },
+          "efeitos": {
+            "items": {
+              "$ref": "#/components/schemas/Efeito"
+            },
+            "type": "array"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          },
+          "metodo": {
+            "nullable": true,
+            "type": "string"
+          },
+          "n_modelo": {
+            "description": "Novatos no modelo",
+            "nullable": true,
+            "type": "integer"
+          },
+          "pais": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Error": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "description": "Error code",
+            "type": "integer"
+          },
+          "errors": {
+            "additionalProperties": {},
+            "description": "Errors",
+            "type": "object"
+          },
+          "message": {
+            "description": "Error message",
+            "type": "string"
+          },
+          "status": {
+            "description": "Error name",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Health": {
+        "additionalProperties": false,
+        "properties": {
+          "banco": {
+            "type": "string"
+          },
+          "status": {
+            "description": "ok | degradado",
+            "type": "string"
+          },
+          "ultima_carga": {
+            "additionalProperties": {},
+            "nullable": true,
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "Kpis": {
+        "additionalProperties": false,
+        "properties": {
+          "fim": {
+            "format": "date",
+            "nullable": true,
+            "type": "string"
+          },
+          "inicio": {
+            "format": "date",
+            "nullable": true,
+            "type": "string"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          },
+          "pais": {
+            "type": "string"
+          },
+          "recusa_total": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Taxa"
+              }
+            ],
+            "description": "Novatos com recusa total na 1ª conversa"
+          },
+          "retorno_7d": {
+            "$ref": "#/components/schemas/Taxa"
+          }
+        },
+        "type": "object"
+      },
+      "LinhaCoorte": {
+        "additionalProperties": false,
+        "properties": {
+          "amostra_suficiente": {
+            "description": "Metade do IC ≤ 10 p.p.",
+            "type": "boolean"
+          },
+          "coorte": {
+            "description": "Início da semana/mês; nulo em 'periodo'",
+            "format": "date",
+            "nullable": true,
+            "type": "string"
+          },
+          "ic_inf": {
+            "description": "IC 95% de Wilson, limite inferior",
+            "nullable": true,
+            "type": "number"
+          },
+          "ic_sup": {
+            "description": "IC 95% de Wilson, limite superior",
+            "nullable": true,
+            "type": "number"
+          },
+          "nivel": {
+            "description": "Nível da dimensão ('todos' em 'geral')",
+            "type": "string"
+          },
+          "novos": {
+            "description": "Novatos elegíveis (denominador)",
+            "nullable": true,
+            "type": "integer"
+          },
+          "suprimido_k": {
+            "description": "Menos de 20 novatos: números ocultos (k-anonimato)",
+            "type": "boolean"
+          },
+          "taxa": {
+            "description": "voltaram / novos",
+            "nullable": true,
+            "type": "number"
+          },
+          "voltaram": {
+            "description": "Novatos com nova sessão em até 7 dias",
+            "nullable": true,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "Meta": {
+        "additionalProperties": false,
+        "properties": {
+          "carga_em": {
+            "description": "Fim da carga (UTC)",
+            "format": "date-time",
+            "type": "string"
+          },
+          "carga_id": {
+            "description": "Carga da base analítica que gerou os números",
+            "type": "integer"
+          },
+          "dados_ate": {
+            "description": "Último dia da base bruta (fuso de São Paulo)",
+            "format": "date",
+            "type": "string"
+          },
+          "dados_de": {
+            "description": "1º dia da base bruta (fuso de São Paulo)",
+            "format": "date",
+            "type": "string"
+          },
+          "definicao_versao": {
+            "description": "Versão das definições (etl/definicoes.py)",
+            "type": "string"
+          },
+          "fonte": {
+            "description": "Objeto da base analítica consultado",
+            "type": "string"
+          },
+          "request_id": {
+            "description": "Identificador da requisição (também no header X-Request-ID)",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PaginationMetadata": {
+        "additionalProperties": false,
+        "properties": {
+          "first_page": {
+            "description": "First available page number.",
+            "type": "integer"
+          },
+          "last_page": {
+            "description": "Last available page number.",
+            "type": "integer"
+          },
+          "next_page": {
+            "description": "Next page number.",
+            "type": "integer"
+          },
+          "page": {
+            "description": "Current page number.",
+            "type": "integer"
+          },
+          "previous_page": {
+            "description": "Previous page number.",
+            "type": "integer"
+          },
+          "total": {
+            "description": "Total number of items.",
+            "type": "integer"
+          },
+          "total_pages": {
+            "description": "Total number of pages.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "Taxa": {
+        "additionalProperties": false,
+        "properties": {
+          "amostra_suficiente": {
+            "description": "Metade do IC ≤ 10 p.p.",
+            "type": "boolean"
+          },
+          "ic_inf": {
+            "description": "IC 95% de Wilson, limite inferior",
+            "nullable": true,
+            "type": "number"
+          },
+          "ic_sup": {
+            "description": "IC 95% de Wilson, limite superior",
+            "nullable": true,
+            "type": "number"
+          },
+          "novos": {
+            "description": "Novatos elegíveis (denominador)",
+            "nullable": true,
+            "type": "integer"
+          },
+          "taxa": {
+            "description": "voltaram / novos",
+            "nullable": true,
+            "type": "number"
+          },
+          "voltaram": {
+            "description": "Novatos com nova sessão em até 7 dias",
+            "nullable": true,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "Retenção do assistente — WildChat-1M (Brasil)",
+    "version": "1.0"
+  },
+  "openapi": "3.0.3",
+  "paths": {
+    "/api/fatores/efeitos": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "pais",
+            "required": false,
+            "schema": {
+              "default": "Brazil",
+              "type": "string"
+            }
+          },
+          {
+            "description": "ajustado (regressão, mesmo mês e perfil) | bruto (sem ajuste)",
+            "in": "query",
+            "name": "ajuste",
+            "required": false,
+            "schema": {
+              "default": "ajustado",
+              "enum": [
+                "ajustado",
+                "bruto"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Efeitos"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Efeito de cada nível contra a referência, em p.p., com IC 95%: bruto ou ajustado (regressão linear).",
+        "tags": [
+          "fatores"
+        ]
+      }
+    },
+    "/api/health": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Estado da API, do banco e da última carga.",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/api/kpis": {
+      "get": {
+        "parameters": [
+          {
+            "description": "País (BDR-007: só Brazil na entrega)",
+            "in": "query",
+            "name": "pais",
+            "required": false,
+            "schema": {
+              "default": "Brazil",
+              "type": "string"
+            }
+          },
+          {
+            "description": "1º dia da 1ª sessão, inclusive (São Paulo)",
+            "in": "query",
+            "name": "inicio",
+            "required": false,
+            "schema": {
+              "default": null,
+              "format": "date",
+              "nullable": true,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Último dia da 1ª sessão, inclusive",
+            "in": "query",
+            "name": "fim",
+            "required": false,
+            "schema": {
+              "default": null,
+              "format": "date",
+              "nullable": true,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Kpis"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Novatos, retorno em 7 dias e % de recusa total na 1ª conversa, com IC 95% de Wilson.",
+        "tags": [
+          "kpis"
+        ]
+      }
+    },
+    "/api/retencao/coortes": {
+      "get": {
+        "description": "Nível com menos de 20 novatos volta com `suprimido_k = true` e sem números (k-anonimato).",
+        "parameters": [
+          {
+            "description": "País (BDR-007: só Brazil na entrega)",
+            "in": "query",
+            "name": "pais",
+            "required": false,
+            "schema": {
+              "default": "Brazil",
+              "type": "string"
+            }
+          },
+          {
+            "description": "1º dia da 1ª sessão, inclusive (São Paulo)",
+            "in": "query",
+            "name": "inicio",
+            "required": false,
+            "schema": {
+              "default": null,
+              "format": "date",
+              "nullable": true,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Último dia da 1ª sessão, inclusive",
+            "in": "query",
+            "name": "fim",
+            "required": false,
+            "schema": {
+              "default": null,
+              "format": "date",
+              "nullable": true,
+              "type": "string"
+            }
+          },
+          {
+            "description": "mes | semana | periodo (o período todo, por nível)",
+            "in": "query",
+            "name": "granularidade",
+            "required": false,
+            "schema": {
+              "default": "mes",
+              "enum": [
+                "mes",
+                "semana",
+                "periodo"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Abre a taxa por nível desta dimensão",
+            "in": "query",
+            "name": "dimensao",
+            "required": false,
+            "schema": {
+              "default": "geral",
+              "enum": [
+                "geral",
+                "tema_grupo",
+                "tema",
+                "familia_modelo",
+                "dispositivo",
+                "idioma_3",
+                "faixa_horaria",
+                "resposta_quartil",
+                "recusa_total",
+                "estado_grupo"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Coortes"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Retorno em 7 dias por coorte (mês ou semana) ou no período, opcionalmente aberto por uma dimensão.",
+        "tags": [
+          "retencao"
+        ]
+      }
+    }
+  },
+  "tags": [
+    {
+      "description": "Indicadores principais do período",
+      "name": "kpis"
+    },
+    {
+      "description": "Retorno em 7 dias por coorte",
+      "name": "retencao"
+    },
+    {
+      "description": "Efeito de cada fator",
+      "name": "fatores"
+    },
+    {
+      "description": "Estado da API e do banco",
+      "name": "health"
+    }
+  ]
+}
