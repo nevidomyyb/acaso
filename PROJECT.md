@@ -40,12 +40,12 @@
 - [x] O dashboard **nunca lê a base bruta** — só a base analítica.
 - [x] **Pelo menos 2 telas com dados reais**.
 - [x] Análise somente sobre `country = 'Brazil'` (premissa registrada sobre como aplicar o filtro).
-- [ ] **Toda infra e custo do dashboard na AWS**, inclusive o LLM se usado. Para a entrega roda local; **descrever a implantação**.
-- [ ] Declarar **o que o dashboard mostra e o que nunca mostra** (dados pessoais).
-- [ ] Repositório com instruções + **ADRs e BDRs** (contexto, opções, escolha).
-- [ ] Cada premissa registrada **+ o que muda no resultado se estiver errada**.
-- [ ] Documento curto com achados e decisões (não um documento longo).
-- [ ] Parágrafo final de **uso de IA**: ferramentas, para quê, o que conferiu/corrigiu/descartou, **horas dedicadas**.
+- [x] **Toda infra e custo do dashboard na AWS**, inclusive o LLM se usado. Para a entrega roda local; **descrever a implantação**.
+- [x] Declarar **o que o dashboard mostra e o que nunca mostra** (dados pessoais).
+- [x] Repositório com instruções + **ADRs e BDRs** (contexto, opções, escolha).
+- [x] Cada premissa registrada **+ o que muda no resultado se estiver errada**.
+- [x] Documento curto com achados e decisões (não um documento longo).
+- [x] Parágrafo final de **uso de IA**: ferramentas, para quê, o que conferiu/corrigiu/descartou, **horas dedicadas**.
 
 ---
 
@@ -105,6 +105,7 @@ acaso/
 │   │   ├── classificacao_v1.md # prompt de classificação, versionado
 │   │   └── classificacao_v2.md # v1 + 2 regras de desempate e 3 casos de `recusa = nao`
 │   ├── efeitos.py              # regressão: bruto × ajustado em p.p., com IC; taxa esperada pelo perfil; gera `resultado_efeitos`
+│   ├── incidente.py            # incidente §4.2: carga e endpoint de referência × corrigidos; consulta de confirmação
 │   ├── primeira_experiencia.py # fatores da 1ª experiência, 1 linha por usuário (conteúdo da 1ª conversa, volume da 1ª sessão)
 │   ├── carga.py                # migrations + base analítica a partir da bruta; TRUNCATE + COPY numa transação
 │   ├── conferir_classificacao.py # confere colunas e taxonomia do arquivo de tema e recusa
@@ -117,7 +118,8 @@ acaso/
 │   ├── 01_discovery.py                 # qualidade dos dados: 10 problemas e tratamento (§5.1)
 │   ├── 03_definicoes_sensibilidade.py  # taxa padrão, funil e sensibilidade das definições (§4)
 │   ├── 02_eda.py                       # 1ª experiência sem ajuste: 6 gráficos, cada um com conclusão (§5.2)
-│   └── 04_efeitos_e_confusao.py        # efeitos ajustados, seleção, GPT-4 no mesmo mês e a semana atípica (§5.3 a §5.5)
+│   ├── 04_efeitos_e_confusao.py        # efeitos ajustados, seleção, GPT-4 no mesmo mês e a semana atípica (§5.3 a §5.5)
+│   └── 05_incidente.py                 # o incidente na nossa base: chave IP+UA, 2 mecanismos, 4 defeitos secundários (§9)
 │
 ├── tests/
 │   ├── conftest.py             # base sintética em memória, com retorno conhecido
@@ -130,6 +132,7 @@ acaso/
 │   ├── test_carga.py           # conversões; carga real idempotente, sem dado pessoal, falha sem apagar (db)
 │   ├── test_api.py             # contrato, Wilson SQL = Python, k-anonimato, 422, snapshot do OpenAPI (db)
 │   ├── test_etapa_classificacao.py # fluxo da EC2 com comandos falsos: destrói mesmo se falhar
+│   ├── test_incidente.py       # regressão do incidente: 1 caso por defeito, referência × corrigida; chave do produto
 │   └── banco.py · snapshots/   # banco temporário dos testes `db`; contrato OpenAPI aprovado
 │
 ├── infra/aws/iam/              # usuário acaso-operador + limite acaso-limite para as roles que ele cria
@@ -149,8 +152,8 @@ acaso/
     ├── METODOLOGIA.md          # origem de cada número + indicadores do dashboard (§6.2)
     ├── METODOLOGIA_LABEL.md    # a rotulagem de tema e recusa
     ├── ARQUITETURA.md          # 6 serviços AWS, local × produção, custo
-    ├── RELATORIO.md            # (15/11) documento curto: achados e decisões
-    └── INCIDENTE.md            # (15/11) resposta da §4.2 + o que registrar em cada camada
+    ├── RELATORIO.md            # documento curto: 3 achados, definições, causa × seleção, sugestões, premissas, IA
+    └── INCIDENTE.md            # resposta da §4.2 (diffs da correção) + monitoramento da §4.1
 ```
 
 ### 3.3 Modelo da base analítica (decidido em 14/11)
@@ -486,7 +489,7 @@ A conta tem US$ 146,34 em créditos AWS, com validade até 19/12/2026. O custo d
 | **Qui 12/11** ✅ | Features + EDA | Classificação das 3.361 conversas da 1ª sessão na EC2 (ADR-004) e validação manual (BDR-009, BDR-010); tabela `primeira_experiencia`; EDA (§5.2) | `temas_v2_qwen3_8b.parquet`, `primeira_experiencia`, `02_eda` | 3 |
 | **Sex 13/11** ✅ | Features + análise | `primeira_experiencia.py`; EDA (§5.2); regressão com IC; bruto × ajustado; GPT-4 no mesmo mês; semana atípica (perfil × taxa); 3 achados (candidatos no notebook 04; versão final no `RELATORIO.md`, 15/11). Escopo cortado e `ARQUITETURA.md` escritos | `primeira_experiencia`, `02_eda`, `04_efeitos` | 4 |
 | **Sáb 14/11** ✅ | Construção | Migrations + carga idempotente + pré-cálculos; Flask-smorest + 4 endpoints; **2 telas**; `docker compose up` do zero | Dashboard funcionando com dados reais | 5 |
-| **Dom 15/11** | Sustentação + docs | Incidente §4.2 com teste de regressão; `INCIDENTE.md` (inclui o que registrar em cada camada); ADR-001 e ADR-007; indicadores no METODOLOGIA §11; `RELATORIO.md` | `docs/` completo + testes passando | 3 |
+| **Dom 15/11** ✅ | Sustentação + docs | Incidente §4.2 com teste de regressão; `INCIDENTE.md` (inclui o que registrar em cada camada); ADR-001 e ADR-007; indicadores no METODOLOGIA §11; `RELATORIO.md` | `docs/` completo + testes passando | 3 |
 | **Seg 16/11** | Revisão + envio | Clonar em pasta limpa e rodar `docker compose up`; revisar o `RELATORIO.md` (curto!); fechar parágrafo de IA + horas; **enviar até ~20h** | E-mail enviado | 1–2 |
 
 **Se atrasar, cortar nesta ordem:** o 2º bloco da tela 2 → ADR-001 e ADR-007 (virar seção do RELATORIO).
@@ -538,16 +541,16 @@ horas; a investigação do incidente.
 - [x] ≥2 telas; cada número com definição, fonte e IC; aviso de amostra pequena
 - [x] Efeitos ordenados com IC; bruto × ajustado; o que prova / não prova
 - [x] Semana atípica com decomposição perfil × taxa
-- [ ] 3 achados → 3 decisões
+- [x] 3 achados → 3 decisões
 - [x] Qualidade de dados: problemas + tratamentos
 - [x] Sensibilidade das definições
 - [x] Indicadores documentados com SQL (METODOLOGIA §11)
-- [ ] Arquitetura com diagrama, AWS, endpoints, cache, outros países
-- [ ] Privacidade: mostra × nunca mostra
-- [ ] Monitoramento, testes, caminho até produção
-- [ ] Incidente: 5 itens respondidos com consulta e correção
-- [ ] Riscos e decisões a escalar
-- [ ] ADRs + BDRs
-- [ ] Parágrafo de IA + horas
-- [ ] "A mais" funcionando (ou documentado, se cortado)
+- [x] Arquitetura com diagrama, AWS, endpoints, cache, outros países
+- [x] Privacidade: mostra × nunca mostra
+- [x] Monitoramento, testes, caminho até produção
+- [x] Incidente: 5 itens respondidos com consulta e correção
+- [x] Riscos e decisões a escalar
+- [x] ADRs + BDRs
+- [x] Parágrafo de IA + horas
+- [x] "A mais" funcionando (ou documentado, se cortado)
 - [ ] E-mail enviado para as duas pessoas

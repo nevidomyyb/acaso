@@ -28,7 +28,7 @@ flowchart LR
 
     HF -->|"1x, com SHA-256"| S3
     S3 -->|lê parquet| GLUE
-    GLUE -->|grava tabelas e pré-cálculos| RDS
+    GLUE -->|grava tabelas e efeitos| RDS
     RDS -->|SELECT| FG
     FG --- ALB
     ALB --> PESSOA
@@ -48,7 +48,7 @@ partir do S3 é a carga.
 | Serviço | Papel | Tamanho |
 |---|---|---|
 | **S3** | Guarda a base bruta em parquet e o parquet da classificação. Versionamento ligado | ~25 MB hoje |
-| **AWS Glue, tipo Python Shell** | A carga: lê o S3, aplica as definições (BDR-001 a 010), grava as tabelas e **pré-calcula** os agregados e os efeitos. Agendamento do próprio Glue, 1× por dia | 0,0625 DPU, ~10 min por execução |
+| **AWS Glue, tipo Python Shell** | A carga: lê o S3, aplica as definições (BDR-001 a 010), grava a 1ª experiência e **pré-calcula** os efeitos (regressão). Agendamento do próprio Glue, 1× por dia | 0,0625 DPU, ~10 min por execução |
 | **RDS PostgreSQL** | A base analítica que o dashboard lê | `db.t4g.micro`, 20 GB gp3, 1 AZ |
 | **ECS Fargate** | Uma tarefa com 2 containers: a API Flask (gunicorn) e o dashboard Streamlit. Imagens no ECR, atrás de um ALB | 1 vCPU, 2 GB |
 | **CloudWatch Logs** | Log da carga e da API. Um alarme: falha do job do Glue | Retenção de 30 dias |
@@ -88,8 +88,9 @@ O `docker compose up` **nunca** chama um LLM: a carga lê o parquet pronto.
 
 | Peça | Local (a entrega) | Produção (descrita) |
 |---|---|---|
-| Base bruta | `data/raw/wildchat_br.parquet`, no git | S3, com versionamento |
-| Carga | Container `etl` do compose, roda e termina | Job do Glue, agendado |
+| Base bruta | `data/raw/`, gerada pelo serviço `bruta` do compose (fora do git) | S3, com versionamento |
+| Classificação | `data/enriched/` no git; o serviço `classificacao` confere ou refaz na EC2 | S3; EC2 spot sob demanda |
+| Carga | Serviço `carga` do compose, roda e termina | Job do Glue, agendado |
 | Base analítica | Postgres 16 em container | RDS PostgreSQL |
 | API + dashboard | 2 containers do compose | 1 tarefa do Fargate, 2 containers, atrás do ALB |
 | Segredos | `.env`, opcional | Parameter Store |
@@ -157,3 +158,63 @@ disponibilidade. Hoje nenhum justifica.
 4. Primeira carga manual, pelo job do Glue, com o parquet já no S3.
 5. Deploy da tarefa do Fargate. O `GET /api/health` confere a API e o banco.
 6. Esteira: branch → PR com testes e lint → homologação com cópia da base → produção.
+
+---
+
+## 9. Stack e motivo
+
+| Camada | Escolha | Motivo | Registro |
+|---|---|---|---|
+| Carga e análise | Python + DuckDB | Lê parquet direto, SQL próximo do Postgres, sem infraestrutura | ADR-010 |
+| Base analítica | PostgreSQL + Alembic | Views guardam o SQL dos indicadores; papel só de leitura; RDS barato | ADR-001 |
+| Backend | Flask + flask-smorest + gunicorn | Validação e OpenAPI pelos schemas; Swagger em `/docs` | ADR-002 |
+| Frontend | Streamlit + Altair, tema próprio | Rápido de construir em Python; lê só a API | ADR-003 |
+| Classificação | Qwen3-8B em CPU numa EC2 | Fica na AWS; a conta não tem cota no Bedrock | ADR-004 |
+
+## 10. Modelo da base analítica
+
+| Objeto | Tipo | Conteúdo |
+|---|---|---|
+| `primeira_experiencia` | tabela | 1 linha por usuário (`usuario_sk` substituto): país, coortes, `elegivel`, `voltou_7d` e os fatores da 1ª experiência |
+| `resultado_efeitos` | tabela | 1 linha por nível de fator: n, bruto e ajustado em p.p. com IC, método, versões |
+| `meta_carga` | tabela | 1 linha por execução da carga: SHA-256, versões, linhas lidas, gravadas e rejeitadas, status |
+| `vw_retorno_coorte` | view | retorno por coorte (mês e semana), com IC de Wilson e `amostra_suficiente` |
+| `vw_novato_dimensao` | view | 1 linha por novato e por dimensão; a API filtra o período e soma por nível |
+| `wilson_inf`, `wilson_sup`, `amostra_suficiente`, `k_minimo` | funções | as regras de IC, de amostra e de k-anonimato, num lugar só |
+
+O SQL de cada indicador está no METODOLOGIA §11 e nas migrations ([../db/migrations/](../db/migrations/)).
+
+## 11. Endpoints
+
+Contrato completo no Swagger (`/docs`) e no snapshot [../tests/snapshots/openapi.json](../tests/snapshots/openapi.json).
+Toda resposta leva `meta`: `request_id`, `definicao_versao`, `carga_id`, `dados_ate` e `fonte`.
+
+| Endpoint | Entrada | Saída |
+|---|---|---|
+| `GET /api/kpis` | `pais`, `inicio`, `fim` | novatos, retorno em 7 dias e % de recusa total, cada um com IC e `amostra_suficiente` |
+| `GET /api/retencao/coortes` | `pais`, `inicio`, `fim`, `granularidade` (`mes`, `semana`, `periodo`), `dimensao` | 1 linha por coorte e nível: novos, voltaram, taxa, IC, `amostra_suficiente`, `suprimido_k` |
+| `GET /api/fatores/efeitos` | `pais`, `ajuste` (`ajustado`, `bruto`) | 1 linha por nível: efeito em p.p., IC, `ic_cruza_zero`, n, rótulos e referência |
+| `GET /api/health` | — | estado da API e do banco, última carga; 503 se o banco cair |
+
+## 12. Velocidade e cache
+
+| Pergunta do enunciado | Resposta |
+|---|---|
+| O que é pré-calculado | Sessões, retorno, fatores da 1ª experiência e a regressão: na carga (~1,5 s) |
+| O que vai para cache | Só a resposta da API, na memória do processo do dashboard (`st.cache_data`) |
+| Quando o cache expira | Em 5 min. A carga roda 1× por dia: o atraso máximo entre uma carga nova e a tela é de 5 min |
+| Como medir o tempo de resposta | Log JSON por requisição com `duracao_ms` + header `Server-Timing`; em produção, CloudWatch Logs Insights calcula o p95. Medido: ~15 ms na consulta mais pesada; meta p95 < 500 ms |
+
+Não há cache externo (Redis): a agregação roda sobre ~2.354 linhas, e nada na medição pede um.
+
+## 13. Outros países
+
+| Tema | O que muda no desenho |
+|---|---|
+| Dados | Nada no schema: toda tabela já tem `pais`, e todo endpoint recebe `pais`. A carga troca o filtro do BDR-007 por uma lista de países |
+| Fuso horário | Uma tabela `dim_pais` com o fuso de cada país. A carga calcula coorte, dia e horário no fuso do país; o armazenamento continua em UTC (BDR-005) |
+| Idioma da interface | Os textos do dashboard saem para um dicionário por idioma (`pt-BR`, `es`, `en`); os rótulos dos níveis já estão separados ([../frontend/rotulos.py](../frontend/rotulos.py)) |
+| Comparação entre países | Só com as mesmas definições e com IC lado a lado. O usuário por IP se comporta diferente em cada país (NAT de operadora, IP dinâmico): a tela avisa que a comparação de nível é frágil e compara tendências |
+| Volume | Com milhões de linhas: views materializadas atualizadas ao fim da carga, partição por país; o Glue Python Shell aguenta até alguns GB por execução (ADR-006) |
+| Privacidade | O k-anonimato vale por país; um país pequeno terá mais recortes ocultos |
+
