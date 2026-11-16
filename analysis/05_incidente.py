@@ -72,7 +72,7 @@ def endpoint(bruta: str, corrigida: bool, chave: str | None = None, inicio: str 
 ref = endpoint(BRUTA, corrigida=False)
 rel = endpoint(BRUTA, corrigida=False, chave="sha256(hashed_ip)")  # o "relatório": mesma lógica, chave por IP
 comparacao = ref.merge(rel, on="semana", suffixes=("_dashboard", "_relatorio"))
-display(comparacao.round(3))
+display(comparacao.set_index("semana").round(3))  # a coluna de data não aceita round
 # 1. Na nossa base, a semana de 20/11 tem 76 novatos pelo dashboard de referência e 68 pelo relatório (por IP),
 #    não 2.034 e 1.172.
 # 2. Por coincidência, o dashboard de referência também cai na nossa base (31,1% → 21,1%), e o relatório cai menos

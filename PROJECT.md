@@ -270,7 +270,7 @@ Cada recurso é um `Blueprint` do smorest, com `@blp.arguments(SchemaEntrada, lo
 Todo response com `request_id`, `definicao_versao` e `fonte` (campos comuns num schema base `MetaSchema`).
 
 ### 6.4 Performance
-- **Pré-calculado na carga:** `primeira_experiencia`, `agg_coorte`, `resultado_efeitos` (o modelo estatístico roda no ETL, não no request).
+- **Pré-calculado na carga:** `primeira_experiencia` e `resultado_efeitos` (o modelo estatístico roda no ETL, não no request). A soma por coorte e por nível roda no request, por views sobre a `primeira_experiencia` (~15 ms; ARQUITETURA §12). A `agg_coorte` saiu em 14/11: os filtros de período são livres.
 - **Sem cache externo.** As tabelas chegam prontas da carga, e cada endpoint é um `SELECT` sobre poucos milhares de linhas. Um cache em memória do processo entra só se a medição acusar necessidade. Motivo do corte: Redis e ElastiCache seriam um serviço a mais para um ganho que a medição não pede.
 - **Medição:** hooks `before_request`/`after_request` do Flask que geram `request_id` e logam `duracao_ms` por endpoint; meta p95 < 500 ms; em produção, CloudWatch.
 
@@ -354,13 +354,13 @@ Consequências / o que muda se a premissa estiver errada: ...
 
 | ADR | Decisão | Status |
 |---|---|---|
-| 001 | Base analítica em PostgreSQL | a escrever (15/11), meia página |
+| 001 | Base analítica em PostgreSQL (RDS em produção), migrations com Alembic | **aceito (15/11)** |
 | 002 | **Backend em Flask + flask-smorest** (vs. FastAPI, Django REST) — familiaridade do time, OpenAPI automático pelos schemas marshmallow, Blueprints | **aceito** |
 | 003 | Frontend: Streamlit com tema, consumindo a API | **aceito (11/11)** |
 | 004 | **Classificação com LLM aberto (Qwen3-8B) numa EC2 só com CPU**, pré-calculada e versionada; validação com amostra manual (§12.1). Bedrock avaliado e descartado: a conta nova tem cota 0 em todos os modelos | **aceito (12/11)** |
 | 005 | Pré-cálculo na carga, sem cache externo | **não vira ADR.** Decisão registrada na §6.4 |
 | 006 | **Arquitetura AWS em 6 serviços: S3, Glue Python Shell, RDS, ECS Fargate, CloudWatch, Parameter Store** (vs. Glue Spark, Step Functions, EventBridge, ElastiCache, CloudFront) | **aceito (13/11)** |
-| 007 | Privacidade: o que o dashboard mostra e nunca mostra; k-anonimato | a escrever (15/11), meia página |
+| 007 | Privacidade: o que o dashboard mostra e nunca mostra; k-anonimato (k = 20) | **aceito (15/11)** |
 | 008 | Método estatístico: regressão linear (bruto × ajustado), com mês e estado como controles | **não vira ADR.** Decisão registrada em `docs/METODOLOGIA.md` §5 |
 | 010 | **Motor de análise/ETL local: DuckDB** (vs. pandas puro, Polars, Spark, carregar tudo no Postgres, **Polars + Postgres + dbt**) — lê parquet direto, processa fora da memória, SQL reaproveitável; dbt avaliado e adiado por risco de prazo (texto completo abaixo) | **aceito** |
 
@@ -406,8 +406,8 @@ Opções consideradas:
 Decisão: F (DuckDB). Entrega o mesmo ganho de memória do Polars e mantém as definições
 em SQL que migra quase direto para os indicadores do Postgres, com risco de prazo menor
 que E. Os ganhos que o dbt traria são cobertos de forma mais simples: testes de
-definição em pytest com dataset sintético, SQL dos indicadores versionado em
-db/views/ e docs/METODOLOGIA.md §11 com a origem de cada número.
+definição em pytest com dataset sintético, SQL dos indicadores versionado nas
+migrations (db/migrations/) e docs/METODOLOGIA.md §11 com a origem de cada número.
 Consequências:
   - Sem linhagem automática: documentada à mão no METODOLOGIA.md e no diagrama.
   - Em produção, o mesmo job DuckDB roda num Glue Python Shell (ADR-006). Athena
@@ -537,7 +537,7 @@ horas; a investigação do incidente.
 ---
 
 ## Definition of Done (checklist final)
-- [x] `git clone` + `docker compose up` em pasta limpa → telas com dados reais (cópia limpa em 14/11; refazer com `git clone` no dia 16)
+- [x] `git clone` + `docker compose up` em pasta limpa → telas com dados reais (refeito em 16/11 com `git clone` do GitHub, em Linux, sem `.env`: 8,5 min do zero, com o download; 71 testes com banco; 2 telas conferidas por captura)
 - [x] ≥2 telas; cada número com definição, fonte e IC; aviso de amostra pequena
 - [x] Efeitos ordenados com IC; bruto × ajustado; o que prova / não prova
 - [x] Semana atípica com decomposição perfil × taxa

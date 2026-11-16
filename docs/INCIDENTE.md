@@ -28,7 +28,8 @@ Comecei separando o **numerador** do **denominador**, porque os dois materiais j
 - Logo, a pergunta certa não é "por que as pessoas voltaram menos". É "**quem passou a contar como novo**".
 - Retornos parados com novos dobrando têm uma assinatura clara: ~860 "pessoas" que aparecem uma vez e não voltam.
 
-Depois, passei pelas camadas, da tela para a origem, e descartei uma de cada vez com evidência do porque não é naquela camada.
+Depois, passei pelas camadas, da tela para a origem, e descartei uma de cada vez, com a evidência de por que a falha não
+está nela.
 
 ## 2. Em qual camada está a falha
 
@@ -85,11 +86,10 @@ SELECT date_trunc('week', k.primeira_vez)::date AS semana,
        count(*) FILTER (WHERE i.primeira_ip < k.primeira_vez)    AS chave_nova_de_ip_antigo
 FROM chave_ua k JOIN chave_ip i USING (hashed_ip)
 GROUP BY 1 ORDER BY 1;
-
 ```
 
 **Leitura esperada.** Se a hipótese está certa, na semana de 20/11 a razão "chaves por IP" salta de ~1,05 para ~1,7
-(2.034 ÷ 1.172), e quase todas as chaves extras têm uma conversa só. 
+(2.034 ÷ 1.172), e quase todas as chaves extras têm uma conversa só.
 
 ## 3. O trecho que causa o problema, e a correção
 

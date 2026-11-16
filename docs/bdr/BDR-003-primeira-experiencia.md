@@ -23,4 +23,4 @@ Opção A. A base global começa em 09/04/2023, e não há dado de ninguém ante
 | C | 27,8% | 25,9–29,8% | −0,8 p.p. |
 
 - A 1ª experiência é a **1ª sessão**. Os fatores vêm da 1ª conversa dessa sessão (modelo, tema, recusa, tamanho) e da sessão inteira (nº de conversas, duração).
-- Se a premissa estiver errada: usuários antigos voltam mais, então o retorno de abril/2023 fica inflado. Abril/2023 tem 40% contra 28,6% no total; o notebook 05 trata essa coorte.
+- Se a premissa estiver errada: usuários antigos voltam mais, então o retorno de abril/2023 fica inflado. Abril/2023 tem 40% contra 28,6% no total; o ajuste do notebook 04 usa o mês como controle, e isso neutraliza o efeito nos fatores.

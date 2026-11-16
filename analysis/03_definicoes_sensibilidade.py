@@ -181,7 +181,7 @@ mes.assign(taxa=lambda x: (x.taxa * 100).round(1), ic_inf=lambda x: (x.ic_inf * 
 # - Regra de amostra mínima: se o IC passar de ±10 p.p. (cerca de 80 pessoas), o número aparece esmaecido.
 #
 # Dois meses fogem do padrão: abril/2023 (40%, lançamento, primeiros adeptos) e janeiro/2024 (42%, férias,
-# poucos novos). O notebook 05 testa se a mudança é de perfil ou de taxa.
+# poucos novos). O ajuste do notebook 04 usa o mês como controle. O enunciado pede uma semana atípica, e o 04 a trata.
 #
 # ## 5. Decisões registradas
 # BDR-001 a BDR-006 e BDR-008 em `docs/bdr/`, com os números desta análise.

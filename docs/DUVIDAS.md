@@ -4,7 +4,7 @@
 **Prazo:** qua 11/11, de manhã
 **Assunto:** Desafio técnico — dúvidas de escopo
 
-> Rascunho. A pessoa candidata envia. Se não houver resposta a tempo, a premissa de cada item vale.
+> Enviado em 11/11. O desfecho de cada item está no fim deste arquivo.
 
 ---
 
@@ -25,3 +25,14 @@ Tenho quatro dúvidas de escopo. Ao lado de cada uma, indico a premissa que sigo
    *Premissa:* versiono o recorte e o script que o gera a partir da base pública.
 
 Agradeço desde já!
+
+---
+
+## Desfecho (16/11)
+
+| # | Dúvida | O que a entrega faz | Registro |
+|---|---|---|---|
+| 1 | Classificação pronta no repositório | A classificação vai versionada em `data/enriched/`. O compose só a confere; sem o arquivo, refaz na EC2 | ADR-004 |
+| 2 | Stack do frontend | Streamlit com tema próprio, lendo só a API | ADR-003 |
+| 3 | Filtro Brasil | Só `country = 'Brazil'` | BDR-007 |
+| 4 | Recorte no repositório | **Mudou:** o recorte **não** vai para o git. O `docker compose up` baixa a base pública (SHA-256 conferido) e gera o recorte; se `./data` já tem a base, nada é baixado de novo | README ("Como subir"); ARQUITETURA §4 |

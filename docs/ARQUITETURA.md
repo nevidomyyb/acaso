@@ -218,3 +218,24 @@ Não há cache externo (Redis): a agregação roda sobre ~2.354 linhas, e nada n
 | Volume | Com milhões de linhas: views materializadas atualizadas ao fim da carga, partição por país; o Glue Python Shell aguenta até alguns GB por execução (ADR-006) |
 | Privacidade | O k-anonimato vale por país; um país pequeno terá mais recortes ocultos |
 
+
+## 14. As telas
+
+Cada tela traz a pergunta no título, IC em todo número e um rodapé com a definição e a fonte: endpoint,
+`request_id`, carga e versão das definições. O código está em [../frontend/paginas/](../frontend/paginas/).
+
+| Tela | Pergunta | Gráfico | Por que esse tipo |
+|---|---|---|---|
+| 1. Visão geral | "Quantos experimentam o assistente e quantos voltam em até 7 dias?" | 4 indicadores: novatos, retorno em 7 dias, recusa total na estreia, data dos dados | O número principal vem primeiro, com IC e a definição no ícone de ajuda |
+| | | Linha do retorno por coorte mensal, com a faixa do IC e a média tracejada | Mostra a tendência no tempo; a faixa mostra quanto cada mês pode variar |
+| | | Barras de novatos por mês | Novatos é contagem: a barra compara quantidades |
+| | | Linha semanal, num bloco que abre sob demanda | Serve para achar semanas fora do padrão; fica fechada porque o IC semanal é de ±15 p.p. |
+| 2. O que faz voltar | "O que na 1ª experiência faz a pessoa voltar?" | Gráfico de efeitos: ponto e IC por nível, ordenado pelo efeito, com a troca ajustado × bruto | Mostra tamanho, direção e incerteza de todos os fatores numa escala só (p.p.). A troca para "bruto" mostra a seleção. Azul = IC fora do zero; cinza = cruza o zero |
+| | | Barras horizontais de retorno por tema e por modelo, com IC e a média tracejada; outras dimensões num seletor | Compara taxas entre grupos de rótulo longo; a barra horizontal deixa o rótulo legível |
+
+**Quando a base é pequena demais:**
+- Se o IC passa de ±10 p.p. (cerca de 80 novatos), o ponto fica vazado e a barra fica clara. O indicador do topo
+  mostra o aviso "amostra insuficiente". O número nunca some sem aviso.
+- Um grupo com menos de 20 novatos não mostra número (k-anonimato, ADR-007). O rótulo diz "menos de 20 novatos:
+  oculto".
+- O bloco "Ver os números em tabela" traz os valores exatos de cada mês.

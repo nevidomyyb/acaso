@@ -80,8 +80,8 @@ Fonte: [allenai/WildChat-1M](https://huggingface.co/datasets/allenai/WildChat-1M
 
 | Documento | Conteúdo |
 |---|---|
-| [docs/RELATORIO.md](docs/RELATORIO.md) | **Comece aqui:** achados, decisões, premissas e uso de IA, em 4 páginas |
-| [docs/INCIDENTE.md](docs/INCIDENTE.md) | Incidente da semana de 20/11/2023: causa, consultas, correção e monitoramento |
+| [docs/RELATORIO.md](docs/RELATORIO.md) ([PDF](docs/RELATORIO.pdf)) | **Comece aqui:** achados, decisões, premissas e uso de IA, em 3 páginas |
+| [docs/INCIDENTE.md](docs/INCIDENTE.md) ([PDF](docs/INCIDENTE.pdf)) | Incidente da semana de 20/11/2023: causa, consultas, correção e monitoramento |
 | [docs/METODOLOGIA.md](docs/METODOLOGIA.md) | Como cada número é calculado: definições, sensibilidade, IC, código e testes; §11 = indicadores e SQL |
 | [docs/METODOLOGIA_LABEL.md](docs/METODOLOGIA_LABEL.md) | A rotulagem de tema e recusa: desenho, execução, validação e limites |
 | [docs/ARQUITETURA.md](docs/ARQUITETURA.md) | Os 6 serviços AWS, local × produção, custo por mês |

@@ -92,7 +92,7 @@ Detalhe: notebook [04_efeitos_e_confusao](../analysis/04_efeitos_e_confusao.ipyn
 - **Privacidade:** a base analítica não guarda texto, IP nem navegador; grupos com menos de 20 pessoas não
   aparecem (ADR-007).
 
-Detalhe: [ARQUITETURA.md](ARQUITETURA.md) (inclui outros países, cache e endpoints) e [METODOLOGIA.md](METODOLOGIA.md)
+Detalhe: [ARQUITETURA.md](ARQUITETURA.md) (telas e gráficos no §14; outros países, cache e endpoints) e [METODOLOGIA.md](METODOLOGIA.md)
 §11 (indicadores e SQL).
 
 ## 8. Sustentação e o incidente
@@ -120,8 +120,8 @@ Todos os riscos e as decisões a levar ao cliente: [RISCOS.md](RISCOS.md).
 - Usei o **Claude Code** em todo o trabalho: discovery, análise, código da carga, da API e do dashboard, testes e
 textos. Usei o **Claude no navegador** para o primeiro passo do projeto, criar o plano de desenvolvimento e analisar o contexto do desafio, além disso também usei para montar o mini-app em que rotulei 151 conversas à mão, e um **LLM aberto
 (Qwen3-8B) numa EC2** para classificar o tema e a recusa. 
-- **Conferi:** a classificação contra os meus rótulos, feitos às cegas (83,8% em 7 grupos); cada número da carga contra o notebook; o SQL dos indicadores contra o Python (por teste). Glossário de dados e atualização do PROJECT.md e CLAUDE.md conforme iamos avançando e mudando o escopo.
-- **Corrigi:** Alucinaões de números dados como fatos antes mesmo de rodar a análise. Claude tinha tratado o compose up como se fosse re-baixar todos os dados sempre que fosse rodar o projeto. Fluxo de desenvolvimento e commit: o claude tentava commitar os dados brutos sempre, além de fazer um fluxo de commit diferente do que eu tinha definido para o projeto (por entrega/dia)
+- **Conferi:** a classificação contra os meus rótulos, feitos às cegas (83,8% em 7 grupos); cada número da carga contra o notebook; o SQL dos indicadores contra o Python (por teste). Glossário de dados e atualização do PROJECT.md e CLAUDE.md conforme íamos avançando e mudando o escopo.
+- **Corrigi:** Alucinações de números dados como fatos antes mesmo de rodar a análise. Claude tinha tratado o compose up como se fosse re-baixar todos os dados sempre que fosse rodar o projeto. Fluxo de desenvolvimento e commit: o Claude tentava commitar os dados brutos sempre, além de fazer um fluxo de commit diferente do que eu tinha definido para o projeto (por entrega/dia).
 - **Descartei:** o Bedrock (conta sem cota); um método estatístico mais complexo, trocado por regressão linear; duas telas a mais para validação da saúde dos dados (descartado para manter o projeto viável no prazo). Utilização de múltiplos serviços na AWS na sugestão de deploy.
 - **Horas:** cerca de 10,5 h (~1,5 h por dia, de 10 a
 16/11). O log dia a dia está em [USO_DE_IA.md](USO_DE_IA.md).
