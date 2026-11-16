@@ -143,7 +143,6 @@ acaso/
 ├── frontend/                   # Streamlit com tema próprio, 2 telas em Altair, lendo só a API
 │
 └── docs/
-    ├── desafio/enunciado.txt   # texto do enunciado, para busca
     ├── adr/                    # ADR-002, 003, 004, 006, 010 (+ modelo e índice); 001 e 007 em 15/11
     ├── bdr/                    # BDR-001 a 010 (+ modelo e índice)
     ├── DUVIDAS.md              # dúvidas e a premissa de cada uma
